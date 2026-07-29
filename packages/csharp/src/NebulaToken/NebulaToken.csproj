@@ -86,7 +86,7 @@
       reaches a consumer (PrivateAssets="all", and it is a development
       dependency).
     -->
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.301" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
