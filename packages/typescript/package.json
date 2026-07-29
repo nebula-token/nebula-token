@@ -53,8 +53,8 @@
     "provenance": true
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "tsx": "^4.19.0",
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.1",
     "typescript": "^5.6.0"
   }
 }
