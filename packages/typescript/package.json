@@ -1,0 +1,60 @@
+{
+  "name": "nebula-token",
+  "version": "1.0.0",
+  "description": "Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding. Zero dependencies.",
+  "license": "Apache-2.0",
+  "author": "Matteo Teodori",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "skills/nebula-token-typescript/SKILL.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx --test test/*.test.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "refresh-token",
+    "authentication",
+    "security",
+    "oauth2",
+    "rfc9700",
+    "token-rotation",
+    "nebula"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nebula-token/nebula-token.git",
+    "directory": "packages/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/nebula-token/nebula-token/issues"
+  },
+  "homepage": "https://nebulatoken.dev",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

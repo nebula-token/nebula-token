@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use NEBULA in academic work, please cite it as below."
+title: "NEBULA: a language-independent specification for opaque rotating refresh tokens"
+abstract: >-
+  A precise, language-independent specification of the RFC 9700 refresh-token
+  model — opaque selector/verifier tokens, rotation on every use, replay
+  detection with family revocation, bounded lifetimes and optional sender
+  binding — together with ten conformant reference implementations and a
+  conformance suite published as machine-readable data.
+type: software
+authors:
+  - family-names: Teodori
+    given-names: Matteo
+    # The contact of record, shared with the package manifests and the paper.
+    # SUPPORT.md says what each address is for.
+    email: hello@nebulatoken.dev
+version: 1.0.0
+# Must equal the date of the 1.0.0 tag, together with the heading in
+# CHANGELOG.md. RELEASING.md carries the step that keeps the three in step.
+date-released: "2026-07-28"
+license: Apache-2.0
+repository-code: "https://github.com/nebula-token/nebula-token"
+url: "https://nebulatoken.dev"
+keywords:
+  - refresh-token
+  - token-rotation
+  - replay-detection
+  - authentication
+  - oauth2
+  - rfc9700
+  - security
+  - conformance-testing
+#
+# An archival DOI and a preferred-citation block are deliberately absent until
+# the artefacts they point at exist: a DOI is minted from a published tag, and
+# a preferred-citation pointing at a preprint that is not yet posted would make
+# every citing tool emit a dead reference. RELEASING.md carries both as
+# post-tag steps. The shape they take when they arrive:
+#
+# identifiers:
+#   - type: doi
+#     value: 10.5281/zenodo.XXXXXXX
+#     description: Archived snapshot of the 1.0.0 release.

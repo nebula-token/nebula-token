@@ -1,0 +1,79 @@
+# Code owners.
+#
+# Review here is not a formality. NEBULA's entire value is that ten
+# implementations agree, so the files that define what "agree" means — the
+# specification, the vectors, the compatibility contract — need an owner who
+# will refuse a change that silently forks behaviour in one language.
+#
+# GitHub uses the LAST matching pattern, so the ordering below is
+# general-to-specific on purpose.
+#
+# Every rule below names @nebula-token/maintainers, one team, because a team is
+# the only owner form that survives a change in who the maintainers are: a second
+# maintainer joins by being added to the team, and this file is not touched. A
+# bare organization is NOT a valid owner — GitHub accepts @username or
+# @org/team-name and nothing else — so @nebula-token on its own would resolve to
+# nobody.
+#
+# THE TEAM MUST BE VISIBLE AND MUST HAVE EXPLICIT `write` ACCESS TO THIS
+# REPOSITORY. Both, separately. A secret team is skipped, and a team whose
+# members already have write access through the organization is still skipped
+# unless the team itself was granted it. In either case GitHub does not fail:
+# the rule matches, no review is requested, and the file goes on looking
+# enforced. Check it on a real pull request before trusting branch protection.
+#
+# The per-path rows all point at that one team today. They are kept because they
+# are the review boundaries this project considers real, and because splitting
+# them across specialised teams later is a change to the owner column only.
+
+# Everything, by default.
+*                               @nebula-token/maintainers
+
+# ------------------------------------------------------------ the contract
+#
+# A change here changes every implementation at once, whether or not the pull
+# request touches them.
+
+/SPECIFICATION.md               @nebula-token/maintainers
+/spec/                          @nebula-token/maintainers
+/COMPATIBILITY.md               @nebula-token/maintainers
+/VERSIONING.md                  @nebula-token/maintainers
+/SUPPORT.md                     @nebula-token/maintainers
+
+# ------------------------------------------------------ release engineering
+#
+# These hold, or lead to, the publishing credentials for ten registries.
+
+/.github/                       @nebula-token/maintainers
+/.github/workflows/release.yml  @nebula-token/maintainers
+/.github/runtime-matrix.json    @nebula-token/maintainers
+/scripts/                       @nebula-token/maintainers
+/RELEASING.md                   @nebula-token/maintainers
+# The conformance harness: the images third parties reproduce our claim in, and
+# the pins that make that reproducible.
+/docker/                        @nebula-token/maintainers
+
+# --------------------------------------------------------------- security
+
+/SECURITY.md                    @nebula-token/maintainers
+/docs/THREAT_MODEL.md           @nebula-token/maintainers
+/.github/workflows/codeql.yml   @nebula-token/maintainers
+/.github/workflows/scorecard.yml @nebula-token/maintainers
+
+# ------------------------------------------------------------ the packages
+
+/packages/typescript/           @nebula-token/maintainers
+/packages/python/               @nebula-token/maintainers
+/packages/go/                   @nebula-token/maintainers
+/packages/rust/                 @nebula-token/maintainers
+/packages/java/                 @nebula-token/maintainers
+/packages/php/                  @nebula-token/maintainers
+/packages/csharp/               @nebula-token/maintainers
+/packages/dart/                 @nebula-token/maintainers
+/packages/ruby/                 @nebula-token/maintainers
+/packages/elixir/               @nebula-token/maintainers
+
+# One licence file, byte-identical in all eleven places by design
+# (scripts/check-licenses.mjs). Changing one means changing all eleven, and the
+# per-package copies are matched by the /packages/<lang>/ rules above.
+/LICENSE                        @nebula-token/maintainers

@@ -1,0 +1,36 @@
+[package]
+name = "nebula-token"
+version = "1.0.0"
+edition = "2021"
+# MSRV. Bumping it is a minor-version change for this crate (VERSIONING.md).
+rust-version = "1.85"
+description = "Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding."
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/nebula-token/nebula-token"
+homepage = "https://nebulatoken.dev"
+# crates.io allows at most 5 keywords.
+keywords = ["refresh-token", "authentication", "security", "oauth2", "rotation"]
+categories = ["authentication", "cryptography"]
+# An allow-list, not an exclude-list: the .crate must carry the licence file,
+# and must not carry tests/ — conformance is verified from a repository
+# checkout by design (RELEASING.md). An exclude-list forgets things added later.
+include = [
+    "src/**/*.rs",
+    "README.md",
+    "skills/nebula-token-rust/SKILL.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "Cargo.toml",
+]
+
+[dependencies]
+base64 = "0.22"
+hex = "0.4"
+hmac = "0.12"
+rand = "0.8"
+sha2 = "0.10"
+subtle = "2"
+
+[dev-dependencies]
+serde_json = "1"

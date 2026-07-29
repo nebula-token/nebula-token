@@ -1,0 +1,86 @@
+# URLs lychee must not fail the build on, each with the reason it is here.
+# Delete an entry the moment its reason expires — an ignore list nobody prunes
+# is how a genuinely broken link hides.
+
+# ---------------------------------------------------------------------------
+# Release artefacts, which do not exist until the first release is cut.
+#
+# A blanket `https://github.com/nebula-token/.*` used to sit here, because the
+# repository was private and every one of its URLs returned 404 to an anonymous
+# checker, which is what lychee is. The repository went public on 2026-07-29, so
+# the blanket is gone and every repository, blob and tree URL in the docs is
+# checked for real from the next run — nebula-token/nebula-token is the canonical
+# home and the ONLY repository, so those are the most load-bearing links here and
+# they should not be exempt from anything.
+#
+# Exactly two survive, and only because they name a GitHub *release* rather than
+# a path in the tree:
+#
+#   * the skills archive, attached by the `github-release` job (RELEASING.md
+#     step 7) and documented by skills/README.md as the air-gapped install route;
+#   * the `## [1.0.0]` link target in the root changelog and the six per-package
+#     ones — Keep a Changelog puts the version in brackets precisely because it
+#     is a link to the release, and the release is what does not exist yet.
+#
+# REMOVE BOTH the moment the 1.0.0 release exists. They are the last two rows of
+# this file that a release can retire.
+# ---------------------------------------------------------------------------
+https://github.com/nebula-token/nebula-token/releases/latest/download/nebula-token-skills.zip
+https://github.com/nebula-token/nebula-token/releases/tag/v.*
+
+# ---------------------------------------------------------------------------
+# The primary domain is registered but is not serving yet.
+#
+# PRE-EMPTIVE, NOT COVERAGE. The `links` job runs lychee over `**/*.md` and
+# nothing else, and nebulatoken.dev appears in no markdown file: it is the
+# `homepage` of the ten package manifests and the `url` of CITATION.cff. So this
+# entry matches nothing today, and it must not be read as "the domain is checked
+# and deliberately skipped" — nothing checks it. RELEASING.md, "After the tag",
+# carries the widening of the scan that would make this entry real.
+#
+# nebulatoken.dev serves the website. Nothing resolves through it any more: the
+# Go module dropped its vanity import path, so no `go get` and no build
+# anywhere depends on this host answering.
+#
+# REMOVE once the site is live.
+# ---------------------------------------------------------------------------
+https://nebulatoken.dev.*
+
+# ---------------------------------------------------------------------------
+# Registry pages for packages that have not been published.
+#
+# Same shape as the block above: pre-emptive rather than coverage. None of these
+# ten URLs appears in a markdown file yet — they exist only as `environment.url`
+# in release.yml, which lychee does not read. They become real, and reachable,
+# when the install instructions in the READMEs start linking them after 1.0.0.
+# ---------------------------------------------------------------------------
+https://www.npmjs.com/package/nebula-token
+https://pypi.org/project/nebula-token.*
+https://crates.io/crates/nebula-token
+https://central.sonatype.com/artifact/dev.nebulatoken/.*
+https://www.nuget.org/packages/NebulaToken
+https://rubygems.org/gems/nebula-token
+https://hex.pm/packages/nebula_token
+https://pub.dev/packages/nebula_token
+https://packagist.org/packages/nebula-token/.*
+https://pkg.go.dev/github.com/nebula-token/.*
+
+# ---------------------------------------------------------------------------
+# Hosts that refuse automated requests.
+#
+# Not broken — deliberately hostile to link checkers. A 403 from these says
+# nothing about whether the page exists.
+# ---------------------------------------------------------------------------
+https://www.linkedin.com/.*
+https://twitter.com/.*
+https://x.com/.*
+
+# ---------------------------------------------------------------------------
+# Example and placeholder hosts used in documentation. Reserved by RFC 2606 and
+# RFC 6761 precisely so that they never resolve.
+# ---------------------------------------------------------------------------
+https?://example\.(com|org|net).*
+https?://localhost.*
+https?://127\.0\.0\.1.*
+postgres://.*
+mysql://.*

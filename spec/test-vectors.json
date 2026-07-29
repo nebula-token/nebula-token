@@ -1,0 +1,368 @@
+{
+  "$schema": "./test-vectors.schema.json",
+  "description": "NEBULA spec version 1 conformance vectors. Every implementation MUST pass every case in every section (SPECIFICATION.md [N-47]). A runner MUST assert that the number of cases it executed equals the counts published in `counts` ([N-48]).",
+  "spec_version": 1,
+  "counts": {
+    "verifier_hashing": 7,
+    "device_hashing": 7,
+    "parsing": 32
+  },
+  "constants": {
+    "prefix": "nbl",
+    "selector_bytes": 16,
+    "verifier_bytes": 32,
+    "selector_chars": 22,
+    "verifier_chars": 43,
+    "max_kid_length": 64,
+    "max_token_length": 512,
+    "min_pepper_length": 32,
+    "default_absolute_ttl_seconds": 2592000,
+    "default_idle_ttl_seconds": 604800,
+    "default_reuse_grace_seconds": 0
+  },
+  "verifier_hashing": [
+    {
+      "id": "vh-01",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "verifier_b64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "note": "sequential bytes 0x00..0x1f",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "c1034728bc9307c46c5c137020f2ad5c89d3e31e530631825bbd5fab30aca43c"
+    },
+    {
+      "id": "vh-02",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "verifier_b64url": "__________________________________________8",
+      "note": "all 0xff",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "0c7b06da4876ed97c0919e35a000f10b824e4eefa06fd54bc4629d1ed9ac78ca"
+    },
+    {
+      "id": "vh-03",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "verifier_b64url": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "note": "all zero",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "33ddffd957a506e03a0fffcccb6a7d678cea10721a9ab8be91cc554831cb270e"
+    },
+    {
+      "id": "vh-04",
+      "pepper": "another-pepper-ffeeddccbbaa99887766554433221100",
+      "verifier_b64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "note": "same verifier, different pepper -> different hash",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "e079581d94ef1ce284a0d84871a8a77939cd879c35655abc0873526cacdb3796"
+    },
+    {
+      "id": "vh-05",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "verifier_b64url": "o_HC1OW2l4gRIjNEVWZ3iJkAqrvM3e7_ASNFZ4mrze8",
+      "note": "random-looking",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "0e5ef4eef11cd67119b24c7706cdf4f9926c92ccde274c8ac80c713faa4fbe1e"
+    },
+    {
+      "id": "vh-06",
+      "pepper": "pepper-àèìòù-日本語-0123456789abcdef",
+      "verifier_b64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "note": "non-ASCII pepper: pins UTF-8 encoding of the HMAC key ([N-11])",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "174a6a1ce15e2bc05652c56c279c87760469b1ccc586005f4105055ac982eaef"
+    },
+    {
+      "id": "vh-07",
+      "pepper": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "verifier_b64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "note": "pepper at exactly MIN_PEPPER_LENGTH bytes",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "9ea26b149a8e300ac8ddbf69ca0b0d789aca31c84f2dc3481c0a65b6ce38b68d"
+    }
+  ],
+  "device_hashing": [
+    {
+      "id": "dh-01",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "device_id": "device-123",
+      "note": "HMAC(pepper, 'device:' + deviceId)",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "1e439371458ba8c539bd98a07718530ea9434c511c2c40bc88cb964d4ec84eb6"
+    },
+    {
+      "id": "dh-02",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "device_id": "",
+      "note": "empty device id is a bound value, distinct from absent",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "2928eebc137b6c1641437342486837c6e457be930b60191e1a96b7cf5386982d"
+    },
+    {
+      "id": "dh-03",
+      "pepper": "another-pepper-ffeeddccbbaa99887766554433221100",
+      "device_id": "device-123",
+      "note": "same device, different pepper -> different hash",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "6c09e0c254e6344ee88ea2974c8e6bc1707b5199c580aa1e3cafea91a34102f1"
+    },
+    {
+      "id": "dh-04",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "device_id": "dispositivo-cafè-日本語",
+      "note": "non-ASCII device id: pins UTF-8 encoding of the HMAC message ([N-11])",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "1b9b3ddb138fce5d4663e510fbb6a3c74af800fc9f5e873d04c93a69e1643041"
+    },
+    {
+      "id": "dh-05",
+      "pepper": "pepper-àèìòù-日本語-0123456789abcdef",
+      "device_id": "dispositivo-cafè-日本語",
+      "note": "non-ASCII on both key and message",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "9ef94283374253d51d8ffd4d7ca286268b81b5eeee4a64b76a87f38dc88a6f5e"
+    },
+    {
+      "id": "dh-06",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "device_id": "device:123",
+      "note": "device id containing the separator: no escaping is applied, prefix is literal",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "387009c78d6b68e53d370d03410befd42c785a4bb5a88aa1769f4462e7f46842"
+    },
+    {
+      "id": "dh-07",
+      "pepper": "test-pepper-0123456789abcdef0123456789abcdef",
+      "device_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "note": "long device id",
+      "rule": "N-11",
+      "expected_hmac_sha256_hex": "e8440d9326931bbe3ac646a82e3a328f8383c097ad4aa69509b2fba02972c167"
+    }
+  ],
+  "parsing": [
+    {
+      "id": "p-01",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": true,
+      "kid": "k1",
+      "selector": "AAECAwQFBgcICQoLDA0ODw",
+      "note": "well-formed"
+    },
+    {
+      "id": "p-02",
+      "token": "nbl.key-2026_a.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": true,
+      "kid": "key-2026_a",
+      "selector": "AAECAwQFBgcICQoLDA0ODw",
+      "note": "kid with dash and underscore"
+    },
+    {
+      "id": "p-03",
+      "token": "nbl.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": true,
+      "kid": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "selector": "AAECAwQFBgcICQoLDA0ODw",
+      "note": "kid at exactly MAX_KID_LENGTH bytes"
+    },
+    {
+      "id": "p-04",
+      "token": "",
+      "valid": false,
+      "note": "empty",
+      "rule": "N-6.2"
+    },
+    {
+      "id": "p-05",
+      "token": "garbage",
+      "valid": false,
+      "note": "no structure",
+      "rule": "N-6.2"
+    },
+    {
+      "id": "p-06",
+      "token": "nb2.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "wrong prefix",
+      "rule": "N-6.3"
+    },
+    {
+      "id": "p-07",
+      "token": "NBL.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "prefix is case-sensitive",
+      "rule": "N-6.3"
+    },
+    {
+      "id": "p-08",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw",
+      "valid": false,
+      "note": "3 parts",
+      "rule": "N-6.2"
+    },
+    {
+      "id": "p-09",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8.extra",
+      "valid": false,
+      "note": "5 parts",
+      "rule": "N-6.2"
+    },
+    {
+      "id": "p-10",
+      "token": "nbl..AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "empty kid",
+      "rule": "N-6.2"
+    },
+    {
+      "id": "p-11",
+      "token": "nbl.k1..AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "empty selector",
+      "rule": "N-6.2"
+    },
+    {
+      "id": "p-12",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.",
+      "valid": false,
+      "note": "empty verifier",
+      "rule": "N-6.2"
+    },
+    {
+      "id": "p-13",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "valid": false,
+      "note": "verifier decodes to 31 bytes",
+      "rule": "N-6.6"
+    },
+    {
+      "id": "p-14",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "valid": false,
+      "note": "verifier decodes to 33 bytes",
+      "rule": "N-6.6"
+    },
+    {
+      "id": "p-15",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+      "valid": false,
+      "note": "verifier outside the base64url alphabet",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-16",
+      "token": "nbl.k1.aaaaaaaaaaaaaaaaaaaaa.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "selector 21 chars",
+      "rule": "N-6.6"
+    },
+    {
+      "id": "p-17",
+      "token": "nbl.k1.aaaaaaaaaaaaaaaaaaaaaaa.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "selector 23 chars",
+      "rule": "N-6.6"
+    },
+    {
+      "id": "p-18",
+      "token": "nbl.k1.!!!!!!!!!!!!!!!!!!!!!!.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "selector outside the base64url alphabet",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-19",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0OD+.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "selector uses standard-base64 '+'",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-20",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh/",
+      "valid": false,
+      "note": "verifier uses standard-base64 '/'",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-21",
+      "token": "nbl.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "kid exceeds MAX_KID_LENGTH",
+      "rule": "N-6.5"
+    },
+    {
+      "id": "p-22",
+      "token": "nbl.k+1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "kid outside the base64url alphabet",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-23",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "valid": false,
+      "note": "verifier carries base64 padding",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-24",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\n",
+      "valid": false,
+      "note": "trailing newline",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-25",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8 ",
+      "valid": false,
+      "note": "trailing space",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-26",
+      "token": " nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "leading space",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-27",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\t",
+      "valid": false,
+      "note": "trailing tab",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-28",
+      "token": "nbl.k1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "exceeds MAX_TOKEN_LENGTH",
+      "rule": "N-6.1"
+    },
+    {
+      "id": "p-29",
+      "token": "nbl.éé.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "valid": false,
+      "note": "non-ASCII kid",
+      "rule": "N-6.4"
+    },
+    {
+      "id": "p-30",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh9",
+      "valid": false,
+      "note": "non-canonical verifier: decodes to the same 32 bytes as the canonical form, differing only in the two unused trailing bits (variant 1 of 3)",
+      "rule": "N-7"
+    },
+    {
+      "id": "p-31",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh-",
+      "valid": false,
+      "note": "non-canonical verifier: decodes to the same 32 bytes as the canonical form, differing only in the two unused trailing bits (variant 2 of 3)",
+      "rule": "N-7"
+    },
+    {
+      "id": "p-32",
+      "token": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh_",
+      "valid": false,
+      "note": "non-canonical verifier: decodes to the same 32 bytes as the canonical form, differing only in the two unused trailing bits (variant 3 of 3)",
+      "rule": "N-7"
+    }
+  ]
+}

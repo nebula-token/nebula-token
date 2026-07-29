@@ -1,0 +1,79 @@
+name: Change proposal
+description: Propose a change to the specification or to an implementation
+labels: [enhancement, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A change to behaviour affects **all ten implementations** and every
+        deployment already running them. Proposals are discussed here before any
+        pull request — see [GOVERNANCE.md](../blob/main/GOVERNANCE.md).
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Specification change — behaviour changes in all ten implementations
+        - Implementation-only — one language, no observable behaviour change
+        - New supported runtime, or dropping an end-of-life one
+        - Tooling, CI, documentation or website
+    validations:
+      required: true
+
+  - type: input
+    id: requirements
+    attributes:
+      label: Requirements affected
+      description: >-
+        Which `[N-*]` requirements does this change, add or remove? Write "new"
+        if it would add one. Leave blank only for implementation-only or tooling
+        proposals.
+      placeholder: "[N-30], [N-34]"
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >-
+        What goes wrong today, for whom? A concrete failure beats a general
+        preference — this is an authentication library, and the bar for changing
+        it is high on purpose.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security rationale and consequences
+      description: >-
+        What does this make safer, and what does it make riskier? Every
+        interesting proposal trades something.
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility
+      description: >-
+        Would existing tokens still verify? Would a deployment running the
+        current version interoperate with one running this? Which version bump
+        does it require, and why (VERSIONING.md)?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including doing nothing.
+    validations:
+      required: true

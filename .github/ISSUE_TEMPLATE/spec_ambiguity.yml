@@ -1,0 +1,77 @@
+name: Specification ambiguity
+description: The specification is unclear, self-contradictory, or two implementations disagree
+title: "[N-] "
+labels: [specification, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        COMPATIBILITY.md §8 promises that two implementations passing the vectors
+        agree on every observation the specification defines. **If you have found
+        two that disagree, that is a specification defect** — not an
+        implementation bug — even when neither is obviously wrong, and we want
+        the report.
+
+        The fix is normally a new vector, published as an erratum, resolving the
+        disagreement in the direction the specification already implies.
+
+        Please put the requirement id in the issue title.
+
+  - type: input
+    id: requirement
+    attributes:
+      label: Requirement
+      description: The `[N-*]` id, with a sub-rule if the text enumerates one.
+      placeholder: "[N-6] rule 8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: text
+    attributes:
+      label: The text in question
+      description: Quote it exactly.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of defect
+      options:
+        - Ambiguous — two readings are both defensible
+        - Contradiction — two requirements cannot both hold
+        - Silent — the specification does not say what to do here at all
+        - Untested — the rule is stated but no vector exercises it
+        - Implementations disagree in practice
+    validations:
+      required: true
+
+  - type: textarea
+    id: readings
+    attributes:
+      label: The competing readings, and what each implies
+      description: >-
+        For each reading: what would an implementation do, and what would an
+        adopter observe? If two implementations already differ, name them and
+        say what each does.
+    validations:
+      required: true
+
+  - type: textarea
+    id: input
+    attributes:
+      label: An input that distinguishes them
+      description: >-
+        The token string, sequence of operations, or clock that makes the two
+        readings produce different answers. This is what becomes the vector.
+      render: text
+
+  - type: textarea
+    id: preferred
+    attributes:
+      label: Which reading should win, and why
+      description: >-
+        Argue from the rest of the specification where you can — the resolution
+        that requires no other change is usually the right one.

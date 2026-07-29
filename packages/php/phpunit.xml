@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Run from the repository root:  vendor/bin/phpunit -c packages/php/phpunit.xml
+
+  The composer project root is the REPOSITORY root, not this directory: Packagist
+  reads composer.json from a repository root only, so there is exactly one PHP
+  manifest and it lives there (see the root composer.json and .gitattributes).
+  vendor/ therefore lives there too, which is why bootstrap and the schema
+  location reach two levels up. Every other path below is relative to this file,
+  which is how PHPUnit resolves them, so src/ and tests/ still mean the PHP
+  package's own directories.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="../../vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="../../vendor/autoload.php"
+         colors="true"
+         failOnWarning="true"
+         failOnNotice="true"
+         failOnRisky="true"
+         beStrictAboutOutputDuringTests="true"
+         displayDetailsOnTestsThatTriggerWarnings="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
+         displayDetailsOnSkippedTests="true">
+  <testsuites>
+    <testsuite name="nebula-token">
+      <!-- Discovery is explicit: every *Test.php under tests/, which is the
+           conformance runner, the behavior-vector runner and the PHP-specific
+           suite. A run that discovers nothing is a conformance failure ([N-48]). -->
+      <directory suffix="Test.php">tests</directory>
+    </testsuite>
+  </testsuites>
+  <source>
+    <include>
+      <directory>src</directory>
+    </include>
+  </source>
+</phpunit>

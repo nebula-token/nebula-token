@@ -1,0 +1,108 @@
+* text=auto eol=lf
+*.png binary
+*.pdf binary
+
+# --------------------------------------------------------------- export-ignore
+#
+# What a PHP consumer downloads when Composer installs nebula-token/nebula-token.
+#
+# Packagist reads composer.json from a repository ROOT only, so the manifest for
+# the PHP package is this repository's root composer.json — and this repository
+# holds ten languages. Composer builds a package's dist archive with
+# `git archive`, which honours export-ignore, so the rules below are what keep a
+# PHP consumer from downloading a Rust crate, a Maven pom and a LaTeX paper into
+# their vendor/ directory.
+#
+# Two things to know before editing:
+#
+#   * These rules affect the ARCHIVE ONLY. `git clone` and `actions/checkout`
+#     ignore export-ignore entirely, so CI, the Docker harness and all ten
+#     conformance suites still see the whole tree — including spec/, which every
+#     runner locates by walking up from its own source file.
+#   * Composer's `composer archive` reads only the ROOT .gitattributes, while
+#     GitHub's zipball honours nested ones too. Keeping every rule here means the
+#     two produce the same payload; a rule left in packages/php/.gitattributes
+#     would be silently skipped by one of them.
+#
+# The payload is verified, not assumed:
+#     composer archive --format=tar --dir=/tmp && tar -tf /tmp/nebula-token.tar
+#
+# What must SURVIVE: composer.json, LICENSE, README.md, SPECIFICATION.md, and
+# packages/php minus its test suite — including
+# packages/php/skills/nebula-token-php/, the agent skill in installable form.
+
+# The nine other implementations.
+/packages/typescript export-ignore
+/packages/python     export-ignore
+/packages/go         export-ignore
+/packages/rust       export-ignore
+/packages/java       export-ignore
+/packages/csharp     export-ignore
+/packages/dart       export-ignore
+/packages/ruby       export-ignore
+/packages/elixir     export-ignore
+
+# Project machinery: normative to the repository, dead weight in vendor/.
+# spec/ goes with it — the vectors are run from a checkout and never from an
+# installed package (RELEASING.md step 6), and shipping 84 conformance cases to
+# every consumer would imply otherwise. /skills is only the index README that
+# points at the ten skills; the PHP skill itself lives inside the PHP package,
+# at packages/php/skills/nebula-token-php/SKILL.md, and ships with it.
+/docs    export-ignore
+/spec    export-ignore
+/scripts export-ignore
+/docker  export-ignore
+/assets  export-ignore
+/skills  export-ignore
+
+# Dot-files: CI, editor, link-checker and agent configuration. None of it means
+# anything outside a clone of this repository.
+#
+# .claude-plugin/marketplace.json is the strongest case of the lot. It is the
+# agent-skill catalogue for all ten languages, and nine of its ten `source`
+# paths — ./packages/typescript, ./packages/python and the rest — are
+# export-ignored above. Shipping it would put a catalogue in vendor/ whose
+# entries point at directories the archive does not contain: worse than absent,
+# because it reads as authoritative. The manifest is repository metadata, it is
+# consumed from a clone by `npx skills add` and `/plugin marketplace add`, and
+# nobody installs plugins out of a PHP dependency directory. packages/php's own
+# skill is unaffected — it lives at packages/php/skills/nebula-token-php/ and
+# still ships.
+/.github        export-ignore
+/.claude        export-ignore
+/.claude-plugin export-ignore
+/.gitattributes export-ignore
+/.gitignore     export-ignore
+/.editorconfig  export-ignore
+/.lycheeignore  export-ignore
+/sonar-project.properties export-ignore
+
+# Agent instructions for contributors to THIS repository. AGENTS.md tells an
+# agent how a spec change lands across ten languages and what never to delete
+# from this working tree; CLAUDE.md is a one-line bridge to it. Neither means
+# anything inside a PHP consumer's vendor/, and AGENTS.md is 12 KB of rules
+# about a repository they do not have. They are the last two root files that
+# were shipping only because this deny-list had not named them.
+/AGENTS.md      export-ignore
+/CLAUDE.md      export-ignore
+
+# The PHP test suite. Its runners walk up to spec/, which is export-ignored
+# above, so shipping them would ship a suite that cannot run.
+/packages/php/tests                 export-ignore
+/packages/php/phpunit.xml           export-ignore
+/packages/php/.phpunit.result.cache export-ignore
+
+# Repository governance. LICENSE, README.md and SPECIFICATION.md are NOT here:
+# Packagist renders the README, every published artefact carries the grant
+# (scripts/check-licenses.mjs), and packages/php/README.md links to
+# ../../SPECIFICATION.md — a link that has to keep resolving inside vendor/.
+/CHANGELOG.md       export-ignore
+/CITATION.cff       export-ignore
+/CODE_OF_CONDUCT.md export-ignore
+/COMPATIBILITY.md   export-ignore
+/CONTRIBUTING.md    export-ignore
+/GOVERNANCE.md      export-ignore
+/RELEASING.md       export-ignore
+/SECURITY.md        export-ignore
+/SUPPORT.md         export-ignore
+/VERSIONING.md      export-ignore

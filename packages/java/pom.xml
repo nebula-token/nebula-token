@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    groupId is dev.nebulatoken, not io.nebulatoken. Sonatype verifies a
+    namespace by a DNS TXT record on the exactly-reversed domain, so the
+    groupId permanently binds the JVM identity to one domain. nebulatoken.dev
+    is the registered domain and the one the project publishes; a ccTLD is not
+    something to bet a permanent namespace on. This is now the only identifier
+    in the project tied to DNS — the Go module dropped its vanity import path
+    and resolves from github.com — so the TXT record has exactly one job.
+    The Java package name matches the groupId.
+  -->
+  <groupId>dev.nebulatoken</groupId>
+  <artifactId>nebula-token</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <name>NEBULA Token</name>
+  <description>
+    Opaque rotating refresh tokens for the JVM, implementing the NEBULA
+    specification (the RFC 9700 refresh-token model): selector/verifier tokens
+    that carry no claims, rotation on every use, reuse detection with family
+    revocation, hashed storage, dual expiry clocks and optional sender
+    (device) binding. JDK standard library only — no runtime dependencies —
+    and callable unchanged from Kotlin and Scala.
+  </description>
+  <url>https://github.com/nebula-token/nebula-token</url>
+  <inceptionYear>2026</inceptionYear>
+
+  <organization>
+    <name>NEBULA</name>
+    <url>https://nebulatoken.dev</url>
+  </organization>
+
+  <!--
+    One grant: SPDX `Apache-2.0`. Maven treats multiple <license> blocks as a
+    conjunction of terms rather than a choice, so a single block is both the
+    correct and the unambiguous encoding. The full text ships inside every
+    published artefact as META-INF/LICENSE.
+  -->
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+      <comments>The full text is in META-INF/LICENSE inside the jar.</comments>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <name>Matteo Teodori</name>
+      <url>https://github.com/nebula-token</url>
+      <organization>NEBULA</organization>
+      <organizationUrl>https://nebulatoken.dev</organizationUrl>
+      <roles>
+        <role>author</role>
+        <role>maintainer</role>
+      </roles>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/nebula-token/nebula-token.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/nebula-token/nebula-token.git</developerConnection>
+    <url>https://github.com/nebula-token/nebula-token</url>
+    <tag>v1.0.0</tag>
+  </scm>
+
+  <issueManagement>
+    <system>GitHub Issues</system>
+    <url>https://github.com/nebula-token/nebula-token/issues</url>
+  </issueManagement>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <!--
+      Reproducible builds: pins every archive entry's timestamp so two builds of
+      the same source produce byte-identical artefacts. Bump with the release.
+    -->
+    <project.build.outputTimestamp>2026-07-28T00:00:00Z</project.build.outputTimestamp>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.17.1</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <!--
+      Central publishes three artefacts under this coordinate; the two this
+      project assembles — the main jar and the sources jar — each carry the
+      licence. (The javadoc jar is generated wholesale by the javadoc tool, whose
+      own legal/ directory is the only thing in it that is not our output.) This
+      entry is what puts it in the *sources* jar: maven-source-plugin adds the project's
+      declared <resources> to the archive, and it can see nothing that only
+      exists as a copy-resources execution. It also lands it in target/classes
+      early, which is harmless — the prepare-package execution below is what the
+      main jar actually relies on, for the reason documented there.
+
+      src/main/resources does not exist and never has; overriding the default
+      resource root therefore loses nothing. LICENSE and README.md are
+      unanchored file names, so they match only ${project.basedir}/LICENSE and
+      README.md, never target/classes/META-INF/LICENSE on a warm build. The
+      skill is a PATH, and an ant-style include keeps its directories: it lands
+      at META-INF/skills/nebula-token-java/SKILL.md, which is the shape a client
+      installs — a bare SKILL.md at the jar root would have to be repackaged by
+      hand before any agent could load it.
+
+      Exactly three includes: the licence, the readme and the agent skill. An
+      include naming a file that no longer exists in the basedir is silently
+      skipped rather than failing the build, so a stale entry can outlive its
+      file unnoticed — which is why the licence gate (scripts/check-licenses.mjs)
+      and the skill gate (scripts/check-skills.mjs) assert these lists
+      themselves, and not merely that the files exist.
+    -->
+    <resources>
+      <resource>
+        <directory>${project.basedir}</directory>
+        <targetPath>META-INF</targetPath>
+        <filtering>false</filtering>
+        <includes>
+          <include>LICENSE</include>
+          <include>README.md</include>
+          <include>skills/nebula-token-java/SKILL.md</include>
+        </includes>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-resources-plugin</artifactId>
+        <version>3.3.1</version>
+        <executions>
+          <!--
+            Central and distro packagers both need the licence text inside the
+            artefact, not merely referenced from the pom; the previous release
+            candidate shipped none of it. README.md rides along so the jar
+            documents itself.
+
+            prepare-package, NOT a plain <resources> entry: default-resources
+            runs before compile, and maven-compiler-plugin empties
+            target/classes whenever it decides on a full recompile ("Recompiling
+            the module because of changed source code"). The licence was
+            copied and then silently deleted — the exact failure this is meant
+            to fix. prepare-package is after compile and test, before jar.
+          -->
+          <execution>
+            <id>copy-license-and-readme</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${project.build.outputDirectory}/META-INF</outputDirectory>
+              <resources>
+                <resource>
+                  <directory>${project.basedir}</directory>
+                  <filtering>false</filtering>
+                  <includes>
+                    <include>LICENSE</include>
+                    <include>README.md</include>
+                    <include>skills/nebula-token-java/SKILL.md</include>
+                  </includes>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.1</version>
+        <configuration>
+          <archive>
+            <manifestEntries>
+              <Implementation-Title>${project.artifactId}</Implementation-Title>
+              <Implementation-Version>${project.version}</Implementation-Version>
+              <Implementation-Vendor>NEBULA</Implementation-Vendor>
+              <Automatic-Module-Name>dev.nebulatoken</Automatic-Module-Name>
+              <Bundle-License>Apache-2.0</Bundle-License>
+            </manifestEntries>
+          </archive>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-install-plugin</artifactId>
+        <version>3.1.2</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-deploy-plugin</artifactId>
+        <version>3.1.2</version>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <!--
+      Everything Maven Central demands and an ordinary `mvn verify` does not:
+      a sources jar, a javadoc jar, and a detached GPG signature for each of
+      the three artefacts plus the pom. Kept in a profile so a local build stays
+      fast; the release workflow runs `-Prelease`.
+
+      release.yml's preflight job greps this pom for each of these plugins
+      before it publishes anything, because Maven downgrades an unknown -P
+      profile to a warning — without that check a missing profile would surface
+      as a failure at registry 4 of 10, after three irreversible publishes.
+    -->
+    <profile>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <version>3.3.1</version>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <goals>
+                  <!-- jar-no-fork, not jar: `jar` forks its own
+                       generate-sources lifecycle, so every plugin bound at or
+                       before that phase runs a second time. -->
+                  <goal>jar-no-fork</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <version>3.6.3</version>
+            <executions>
+              <execution>
+                <id>attach-javadocs</id>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+            <configuration>
+              <!-- Reference and syntax errors still fail the build; only the
+                   "every member needs a comment" check is relaxed. -->
+              <doclint>all,-missing</doclint>
+              <notimestamp>true</notimestamp>
+              <quiet>true</quiet>
+            </configuration>
+          </plugin>
+
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.2.4</version>
+            <executions>
+              <execution>
+                <id>sign-artifacts</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+                <configuration>
+                  <!-- The CI signing key is passphrase-protected and there is
+                       no TTY to prompt on; the passphrase arrives in
+                       MAVEN_GPG_PASSPHRASE. -->
+                  <gpgArguments>
+                    <arg>--pinentry-mode</arg>
+                    <arg>loopback</arg>
+                  </gpgArguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
+            <version>0.5.0</version>
+            <extensions>true</extensions>
+            <configuration>
+              <!-- Matches `server-id: central` in release.yml, which setup-java
+                   writes into settings.xml with the Central Portal token. -->
+              <publishingServerId>central</publishingServerId>
+              <!-- Deliberately not auto-publishing. A published coordinate on
+                   Central is permanent; an uploaded-but-unreleased bundle can
+                   be dropped. `waitUntil` VALIDATED still fails the job on a
+                   rejected bundle, so `deploy` remains a real gate — a
+                   maintainer only presses "publish" on the portal.
+
+                   The parameter is `waitUntil` with the enum value VALIDATED
+                   (UPLOADED / VALIDATED / PUBLISHED), not `waitUntilValidated`,
+                   which 0.5.0 does not define. Maven only WARNs on an unknown
+                   plugin parameter, so the misspelling did not fail any build:
+                   it left this gate resting entirely on the plugin's default,
+                   which happens to be VALIDATED today and is not a promise.
+                   Stated explicitly so a plugin upgrade cannot quietly turn the
+                   release gate into a fire-and-forget upload. -->
+              <autoPublish>false</autoPublish>
+              <waitUntil>VALIDATED</waitUntil>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>

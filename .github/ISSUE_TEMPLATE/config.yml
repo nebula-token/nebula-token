@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/nebula-token/nebula-token/security/advisories/new
+    about: Report privately — never in a public issue, pull request or discussion.
+  - name: Usage question
+    url: https://github.com/nebula-token/nebula-token/discussions/categories/q-a
+    about: "\"How do I wire this into my API?\" belongs in Discussions, where the answer is findable by the next person."
+  - name: Documentation
+    url: https://github.com/nebula-token/nebula-token/blob/main/SUPPORT.md
+    about: Where to ask what, and what to expect back.

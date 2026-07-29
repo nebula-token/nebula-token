@@ -1,0 +1,1856 @@
+{
+  "$schema": "./behavior-vectors.schema.json",
+  "description": "NEBULA spec version 1 normative behavioral suite (SPECIFICATION.md [N-47], [N-49]). This file is data, not prose: a conforming implementation demonstrates conformance by executing every scenario below against an injected clock, not by re-deriving the cases in its own test framework.",
+  "spec_version": 1,
+  "counts": {
+    "scenarios": 38,
+    "unconditional": 37
+  },
+  "peppers": {
+    "k1": "pepper-one-0123456789abcdef0123456789ab",
+    "k2": "pepper-two-0123456789abcdef0123456789ab"
+  },
+  "defaults": {
+    "now": 1700000000,
+    "absoluteTtlSeconds": 3600,
+    "idleTtlSeconds": 600,
+    "reuseGraceSeconds": 0,
+    "activeKid": "k1",
+    "peppers": [
+      "k1"
+    ]
+  },
+  "runner": {
+    "ops": {
+      "issue": "engine.issue(userId, deviceId); bind the result under `bind`",
+      "refresh": "engine.refresh(token, deviceId)",
+      "revokeToken": "engine.revokeToken(token)",
+      "revokeFamilyOf": "engine.revokeFamily(familyId of the binding named by `of`)",
+      "revokeUser": "engine.revokeAllForUser(userId)",
+      "advance": "clock += seconds",
+      "reconfigure": "build a new engine over the SAME store with the given peppers and activeKid",
+      "failNextCas": "make the next call to the named store method return false exactly once, then behave normally",
+      "expectStatusCounts": "assert the multiset of record statuses currently in the store",
+      "expectNoRawSecrets": "assert that no stored field contains any issued token, any verifier part, or any raw device identifier"
+    },
+    "token": {
+      "ref": "name of an earlier binding",
+      "literal": "a raw string, used for MALFORMED cases",
+      "forge": "derive an invalid token from `ref` (see `forge`)"
+    },
+    "forge": {
+      "verifier": "replace the verifier part with AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA, the canonical base64url of 32 zero bytes: a well-formed, canonical, wrong secret",
+      "unknownKid": "replace the kid part with zz, which is never configured",
+      "unknownSelector": "replace the selector part with AAAAAAAAAAAAAAAAAAAAAA, which is never stored"
+    },
+    "deviceIdKind": {
+      "lone-surrogate": "construct a string holding a single unpaired surrogate (U+D800). A JSON document cannot carry one, and the ten target runtimes disagree on whether their string type can represent one at all, so it is named here rather than embedded."
+    },
+    "condition": "A scenario carrying `condition` is executed only where that condition holds for the runtime. A runner MUST execute every unconditional scenario and MUST report, by id, any conditional scenario it skipped ([N-48]).",
+    "conditions": {
+      "runtime-admits-invalid-unicode-strings": "The runtime's string type can hold an unpaired surrogate. True for JavaScript, Java, C#, Dart and Python; false for Rust and any UTF-8-only string type."
+    },
+    "expect": {
+      "ok": "whether the operation is expected to succeed",
+      "error": "expected error code when ok is false",
+      "generation": "expected generation of the returned token",
+      "kid": "expected kid of the returned token",
+      "sameFamilyAs": "the returned familyId must equal that of the named binding",
+      "sameExpiresAtAs": "the returned absolute expiry must equal that of the named binding",
+      "idleEqualsExpires": "idleExpiresAt must equal expiresAt (the idle clamp hit the ceiling)",
+      "hasUserId": "tri-state ([N-39]). true: the failure result MUST carry the userId of the affected record. false: it MUST NOT carry one, because no record was resolved. Absent: not asserted.",
+      "hasFamilyId": "tri-state ([N-39]), as hasUserId, for the familyId.",
+      "revoked": "expected number of records revoked"
+    }
+  },
+  "scenarios": [
+    {
+      "id": "rotate-01-basic",
+      "title": "Issue then refresh rotates: successor is usable, predecessor is not",
+      "requirements": [
+        "N-25",
+        "N-26",
+        "N-34"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0",
+          "expect": {
+            "ok": true,
+            "generation": 0
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "generation": 1
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 1,
+            "revoked": 0
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true,
+            "generation": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "rotate-02-generation-accounting",
+      "title": "Generation increments by exactly one per rotation and familyId is stable",
+      "requirements": [
+        "N-34"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0",
+          "expect": {
+            "ok": true,
+            "generation": 0
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "generation": 1,
+            "sameFamilyAs": "t0"
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true,
+            "generation": 2,
+            "sameFamilyAs": "t0"
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t2"
+          },
+          "bind": "t3",
+          "expect": {
+            "ok": true,
+            "generation": 3,
+            "sameFamilyAs": "t0"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 3,
+            "revoked": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "reuse-01-replay-revokes-family",
+      "title": "Replaying a rotated token revokes the entire family",
+      "requirements": [
+        "N-30",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REUSE_DETECTED",
+            "hasUserId": true,
+            "hasFamilyId": true
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 2
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REVOKED"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reuse-02-strict-mode-default",
+      "title": "With the default grace of 0, any replay burns the family immediately",
+      "requirements": [
+        "N-30"
+      ],
+      "config": {
+        "reuseGraceSeconds": 0
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REUSE_DETECTED"
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace-01-retry-succeeds",
+      "title": "Grace retry serves a new token, revokes the unused successor and continues the chain",
+      "requirements": [
+        "N-30"
+      ],
+      "config": {
+        "reuseGraceSeconds": 60
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "generation": 1
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 5
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true,
+            "generation": 1
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 1,
+            "revoked": 1
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REVOKED"
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t2"
+          },
+          "bind": "t3",
+          "expect": {
+            "ok": true,
+            "generation": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace-02-window-not-extendable",
+      "title": "The window is anchored to the original rotation and cannot be walked forward by repeated retries",
+      "requirements": [
+        "N-30"
+      ],
+      "config": {
+        "reuseGraceSeconds": 60
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 40
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 40
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REUSE_DETECTED"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace-03-denied-when-successor-used",
+      "title": "Any evidence that the successor was used converts the retry into a theft verdict",
+      "requirements": [
+        "N-30"
+      ],
+      "config": {
+        "reuseGraceSeconds": 60
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REUSE_DETECTED"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace-04-device-mismatch-burns-family",
+      "title": "The grace path applies sender binding first; a wrong device revokes the family",
+      "requirements": [
+        "N-30",
+        "N-32"
+      ],
+      "config": {
+        "reuseGraceSeconds": 60
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "devA",
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 5
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "devB",
+          "expect": {
+            "ok": false,
+            "error": "DEVICE_MISMATCH"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 2
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "deviceId": "devA",
+          "expect": {
+            "ok": false,
+            "error": "REVOKED"
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace-05-missing-device-burns-family",
+      "title": "A grace retry with no device identifier against a bound family is a binding failure",
+      "requirements": [
+        "N-30",
+        "N-32"
+      ],
+      "config": {
+        "reuseGraceSeconds": 60
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "devA",
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "DEVICE_MISMATCH"
+          }
+        }
+      ]
+    },
+    {
+      "id": "grace-06-never-past-absolute-deadline",
+      "title": "A grace retry after the family's absolute deadline is a replay, not a retry: no token is minted past the ceiling",
+      "requirements": [
+        "N-30"
+      ],
+      "config": {
+        "reuseGraceSeconds": 600,
+        "absoluteTtlSeconds": 100,
+        "idleTtlSeconds": 100
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 140
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REUSE_DETECTED"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "device-01-wrong-device-burns-family",
+      "title": "A refresh from another device revokes the family",
+      "requirements": [
+        "N-32",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "devB",
+          "expect": {
+            "ok": false,
+            "error": "DEVICE_MISMATCH",
+            "hasFamilyId": true,
+            "hasUserId": true
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "device-02-missing-device-burns-family",
+      "title": "A bound family refreshed without a device identifier fails closed",
+      "requirements": [
+        "N-32"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "DEVICE_MISMATCH"
+          }
+        }
+      ]
+    },
+    {
+      "id": "device-03-unbound-family-ignores-device",
+      "title": "An unbound family accepts a refresh that presents a device identifier",
+      "requirements": [
+        "N-32"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "anything",
+          "expect": {
+            "ok": true,
+            "generation": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "device-04-empty-string-is-a-binding",
+      "title": "An empty-string device identifier is a real binding, distinct from an absent one",
+      "requirements": [
+        "N-25",
+        "N-32"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "",
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "generation": 1
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "expect": {
+            "ok": false,
+            "error": "DEVICE_MISMATCH"
+          }
+        }
+      ]
+    },
+    {
+      "id": "device-05-invalid-unicode-is-a-mismatch-not-a-crash",
+      "title": "An unpaired surrogate in the presented device identifier is a binding failure, never an exception",
+      "requirements": [
+        "N-12",
+        "N-8"
+      ],
+      "condition": "runtime-admits-invalid-unicode-strings",
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceIdKind": "lone-surrogate",
+          "expect": {
+            "ok": false,
+            "error": "DEVICE_MISMATCH"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "expiry-01-absolute",
+      "title": "The family dies at its fixed ceiling and the whole family is revoked",
+      "requirements": [
+        "N-26"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 100,
+        "idleTtlSeconds": 100
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "advance",
+          "seconds": 100
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "EXPIRED_ABSOLUTE"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "expiry-02-absolute-never-extended",
+      "title": "Rotation does not move the absolute deadline",
+      "requirements": [
+        "N-33"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 100,
+        "idleTtlSeconds": 50
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "advance",
+          "seconds": 40
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "sameExpiresAtAs": "t0"
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 40
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true,
+            "sameExpiresAtAs": "t0"
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 20
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t2"
+          },
+          "expect": {
+            "ok": false,
+            "error": "EXPIRED_ABSOLUTE"
+          }
+        }
+      ]
+    },
+    {
+      "id": "expiry-03-idle",
+      "title": "Inactivity past the sliding deadline kills the family",
+      "requirements": [
+        "N-26"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 10000,
+        "idleTtlSeconds": 100
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "advance",
+          "seconds": 100
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "EXPIRED_IDLE"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "expiry-04-idle-renews-on-each-refresh",
+      "title": "Each rotation renews the sliding deadline",
+      "requirements": [
+        "N-33"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 10000,
+        "idleTtlSeconds": 100
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "advance",
+          "seconds": 90
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 90
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 90
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t2"
+          },
+          "expect": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "expiry-05-idle-clamped-to-family",
+      "title": "idleExpiresAt is min(now + idleTtl, familyExpiresAt) and never exceeds the ceiling",
+      "requirements": [
+        "N-33"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 100,
+        "idleTtlSeconds": 10000
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0",
+          "expect": {
+            "ok": true,
+            "idleEqualsExpires": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "idleEqualsExpires": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "kid-01-pepper-rotation-preserves-sessions",
+      "title": "Introducing a new active pepper leaves outstanding tokens verifiable and migrates them on next rotation",
+      "requirements": [
+        "N-27",
+        "N-33"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0",
+          "expect": {
+            "ok": true,
+            "kid": "k1"
+          }
+        },
+        {
+          "op": "reconfigure",
+          "peppers": [
+            "k1",
+            "k2"
+          ],
+          "activeKid": "k2"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "kid": "k2"
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "bind": "t2",
+          "expect": {
+            "ok": true,
+            "kid": "k2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "kid-02-device-binding-survives-pepper-rotation",
+      "title": "A device-bound family keeps working across a pepper rotation",
+      "requirements": [
+        "N-32",
+        "N-33"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "reconfigure",
+          "peppers": [
+            "k1",
+            "k2"
+          ],
+          "activeKid": "k2"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "devA",
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "kid": "k2"
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "deviceId": "devA",
+          "bind": "t2",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t2"
+          },
+          "deviceId": "devB",
+          "expect": {
+            "ok": false,
+            "error": "DEVICE_MISMATCH"
+          }
+        }
+      ]
+    },
+    {
+      "id": "kid-03-retired-pepper-yields-unknown-kid",
+      "title": "Retiring the pepper a record was written under yields UNKNOWN_KID, not a crash",
+      "requirements": [
+        "N-27",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "reconfigure",
+          "peppers": [
+            "k2"
+          ],
+          "activeKid": "k2"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "UNKNOWN_KID",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "kid-04-unknown-kid-in-token",
+      "title": "A token naming an unconfigured kid is rejected before any store lookup",
+      "requirements": [
+        "N-26",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0",
+            "forge": "unknownKid"
+          },
+          "expect": {
+            "ok": false,
+            "error": "UNKNOWN_KID",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "lookup-01-not-found",
+      "title": "A well-formed token whose selector is not stored yields NOT_FOUND",
+      "requirements": [
+        "N-26",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0",
+            "forge": "unknownSelector"
+          },
+          "expect": {
+            "ok": false,
+            "error": "NOT_FOUND",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "proof-01-verifier-mismatch",
+      "title": "A canonical but wrong verifier fails the proof of possession without revoking anything",
+      "requirements": [
+        "N-26",
+        "N-28",
+        "N-31",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0",
+            "forge": "verifier"
+          },
+          "expect": {
+            "ok": false,
+            "error": "VERIFIER_MISMATCH",
+            "hasUserId": true,
+            "hasFamilyId": true
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 0,
+            "revoked": 0
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "order-01-rotated-plus-wrong-verifier",
+      "title": "The verifier proof precedes reuse handling: a selector alone must never destroy a session",
+      "requirements": [
+        "N-26",
+        "N-28",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0",
+            "forge": "verifier"
+          },
+          "expect": {
+            "ok": false,
+            "error": "VERIFIER_MISMATCH",
+            "hasUserId": true,
+            "hasFamilyId": true
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 1,
+            "revoked": 0
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "expect": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "order-02-revoked-plus-wrong-verifier",
+      "title": "The verifier proof precedes the revoked check",
+      "requirements": [
+        "N-26",
+        "N-28"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "revokeToken",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": true,
+            "revoked": 1
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0",
+            "forge": "verifier"
+          },
+          "expect": {
+            "ok": false,
+            "error": "VERIFIER_MISMATCH"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order-03-revoked-beats-expiry",
+      "title": "A revoked record past both deadlines reports REVOKED",
+      "requirements": [
+        "N-26"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 100,
+        "idleTtlSeconds": 100
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "revokeToken",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 200
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REVOKED"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order-04-reuse-beats-expiry",
+      "title": "A rotated record past both deadlines reports REUSE_DETECTED, preserving the theft signal",
+      "requirements": [
+        "N-26",
+        "N-28"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 100,
+        "idleTtlSeconds": 100
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "advance",
+          "seconds": 200
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REUSE_DETECTED"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order-05-idle-expiry-beats-device",
+      "title": "Expiry is evaluated before sender binding",
+      "requirements": [
+        "N-26"
+      ],
+      "config": {
+        "absoluteTtlSeconds": 10000,
+        "idleTtlSeconds": 100
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "advance",
+          "seconds": 100
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "devB",
+          "expect": {
+            "ok": false,
+            "error": "EXPIRED_IDLE"
+          }
+        }
+      ]
+    },
+    {
+      "id": "conflict-01-lost-rotation-cas",
+      "title": "Losing the rotation compare-and-set yields CONFLICT, mints nothing, and cleans up the orphan successor",
+      "requirements": [
+        "N-17",
+        "N-34",
+        "N-35"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "failNextCas",
+          "method": "markRotated"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "CONFLICT"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 0,
+            "revoked": 1
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true,
+            "generation": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "conflict-02-lost-grace-cas",
+      "title": "Losing the race to consume the unused successor yields CONFLICT and mints nothing",
+      "requirements": [
+        "N-18",
+        "N-30",
+        "N-35"
+      ],
+      "config": {
+        "reuseGraceSeconds": 60
+      },
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "failNextCas",
+          "method": "revokeIfActive"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": false,
+            "error": "CONFLICT"
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 1,
+            "revoked": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke-01-token-requires-verifier-proof",
+      "title": "Revocation by token is authenticated: a selector alone cannot terminate a session",
+      "requirements": [
+        "N-36",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "revokeToken",
+          "token": {
+            "ref": "t0",
+            "forge": "verifier"
+          },
+          "expect": {
+            "ok": false,
+            "error": "VERIFIER_MISMATCH",
+            "hasUserId": true,
+            "hasFamilyId": true
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 0,
+            "revoked": 0
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke-02-token-works-after-rotation",
+      "title": "A client can log out with a token that has already been rotated, and again with one whose record is already revoked",
+      "requirements": [
+        "N-36"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "revokeToken",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": true,
+            "revoked": 2
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 0,
+            "rotated": 0,
+            "revoked": 2
+          }
+        },
+        {
+          "op": "revokeToken",
+          "token": {
+            "ref": "t0"
+          },
+          "expect": {
+            "ok": true,
+            "revoked": 0
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t1"
+          },
+          "expect": {
+            "ok": false,
+            "error": "REVOKED"
+          }
+        }
+      ]
+    },
+    {
+      "id": "revoke-03-family-and-user",
+      "title": "Administrative revocation by identifier revokes the right records and is idempotent",
+      "requirements": [
+        "N-19",
+        "N-37"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "a0"
+        },
+        {
+          "op": "issue",
+          "userId": "u1",
+          "bind": "b0"
+        },
+        {
+          "op": "issue",
+          "userId": "u2",
+          "bind": "c0"
+        },
+        {
+          "op": "revokeFamilyOf",
+          "of": "a0",
+          "expect": {
+            "revoked": 1
+          }
+        },
+        {
+          "op": "revokeFamilyOf",
+          "of": "a0",
+          "expect": {
+            "revoked": 0
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 2,
+            "rotated": 0,
+            "revoked": 1
+          }
+        },
+        {
+          "op": "revokeUser",
+          "userId": "u1",
+          "expect": {
+            "revoked": 1
+          }
+        },
+        {
+          "op": "expectStatusCounts",
+          "counts": {
+            "active": 1,
+            "rotated": 0,
+            "revoked": 2
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "c0"
+          },
+          "expect": {
+            "ok": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "parse-01-malformed-never-throws",
+      "title": "Hostile and degenerate inputs are refused as values, never as exceptions",
+      "requirements": [
+        "N-8",
+        "N-29",
+        "N-39"
+      ],
+      "steps": [
+        {
+          "op": "refresh",
+          "token": {
+            "literal": ""
+          },
+          "expect": {
+            "ok": false,
+            "error": "MALFORMED",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "literal": "garbage"
+          },
+          "expect": {
+            "ok": false,
+            "error": "MALFORMED",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "literal": "nbl.k1.AAECAwQFBgcICQoLDA0ODw"
+          },
+          "expect": {
+            "ok": false,
+            "error": "MALFORMED",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "literal": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh9"
+          },
+          "expect": {
+            "ok": false,
+            "error": "MALFORMED",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "literal": "nbl.k1.AAECAwQFBgcICQoLDA0ODw.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+          },
+          "expect": {
+            "ok": false,
+            "error": "MALFORMED",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        },
+        {
+          "op": "revokeToken",
+          "token": {
+            "literal": "not-a-token"
+          },
+          "expect": {
+            "ok": false,
+            "error": "MALFORMED",
+            "hasUserId": false,
+            "hasFamilyId": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "privacy-01-no-raw-secrets-persisted",
+      "title": "Neither the raw verifier nor the raw device identifier reaches the store",
+      "requirements": [
+        "N-14"
+      ],
+      "steps": [
+        {
+          "op": "issue",
+          "userId": "u1",
+          "deviceId": "devA",
+          "bind": "t0"
+        },
+        {
+          "op": "refresh",
+          "token": {
+            "ref": "t0"
+          },
+          "deviceId": "devA",
+          "bind": "t1",
+          "expect": {
+            "ok": true
+          }
+        },
+        {
+          "op": "expectNoRawSecrets"
+        }
+      ]
+    }
+  ]
+}

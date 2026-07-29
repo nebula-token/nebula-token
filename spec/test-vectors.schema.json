@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NEBULA test vectors",
+  "$comment": "Structural contract for test-vectors.json. This schema pins shape, not values: the constants block and spec_version are cross-checked against SPECIFICATION.md by scripts/validate-vectors.mjs, so that the specification remains the single source of truth for what the numbers are. Every object is closed (additionalProperties: false) because a misspelled key in a conformance vector is the one class of defect that silently reduces coverage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "description",
+    "spec_version",
+    "counts",
+    "constants",
+    "verifier_hashing",
+    "device_hashing",
+    "parsing"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "spec_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "counts": {
+      "$comment": "Declared case counts. A runner MUST assert that the number of cases it executed equals these, so that a vector file truncated in transit fails loudly instead of silently reducing coverage. Equality with the actual array lengths is asserted by scripts/validate-vectors.mjs.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verifier_hashing",
+        "device_hashing",
+        "parsing"
+      ],
+      "properties": {
+        "verifier_hashing": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "device_hashing": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "parsing": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "constants": {
+      "$comment": "Mirrors the table in SPECIFICATION.md section 1 ([N-4]). Values are checked against that table, not against this schema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prefix",
+        "selector_bytes",
+        "verifier_bytes",
+        "selector_chars",
+        "verifier_chars",
+        "max_kid_length",
+        "max_token_length",
+        "min_pepper_length",
+        "default_absolute_ttl_seconds",
+        "default_idle_ttl_seconds",
+        "default_reuse_grace_seconds"
+      ],
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selector_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "verifier_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "selector_chars": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "verifier_chars": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_kid_length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_token_length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_pepper_length": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "default_absolute_ttl_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "default_idle_ttl_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "default_reuse_grace_seconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "verifier_hashing": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/verifierHashingCase"
+      }
+    },
+    "device_hashing": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/deviceHashingCase"
+      }
+    },
+    "parsing": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/parsingCase"
+      }
+    }
+  },
+  "$defs": {
+    "hex256": {
+      "$comment": "Lowercase hex, 32 bytes. Lowercase is normative ([N-13]); an uppercase vector would encode a value no conforming implementation can produce.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base64url": {
+      "$comment": "Unpadded base64url ([N-5]). Padding and the standard-base64 alphabet are excluded by construction.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "pepper": {
+      "$comment": "At least MIN_PEPPER_LENGTH bytes; the vectors must not encode a pepper the specification forbids.",
+      "type": "string",
+      "minLength": 32
+    },
+    "note": {
+      "$comment": "Why the case exists. Required: an unexplained vector cannot be maintained, because nobody can tell an intentional value from a typo.",
+      "type": "string",
+      "minLength": 1
+    },
+    "ruleRef": {
+      "$comment": "A requirement id, optionally with a sub-rule index into that requirement's enumerated list (N-6.4 is rule 4 of [N-6]). Existence is checked against SPECIFICATION.md by scripts/validate-vectors.mjs.",
+      "type": "string",
+      "pattern": "^N-[1-9][0-9]*(\\.[1-9][0-9]*)?$"
+    },
+    "verifierHashingCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "pepper",
+        "verifier_b64url",
+        "note",
+        "expected_hmac_sha256_hex",
+        "rule"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^vh-[0-9]{2}$"
+        },
+        "pepper": {
+          "$ref": "#/$defs/pepper"
+        },
+        "verifier_b64url": {
+          "$ref": "#/$defs/base64url"
+        },
+        "note": {
+          "$ref": "#/$defs/note"
+        },
+        "expected_hmac_sha256_hex": {
+          "$ref": "#/$defs/hex256"
+        },
+        "rule": {
+          "$ref": "#/$defs/ruleRef"
+        }
+      }
+    },
+    "deviceHashingCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "pepper",
+        "device_id",
+        "note",
+        "expected_hmac_sha256_hex",
+        "rule"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^dh-[0-9]{2}$"
+        },
+        "pepper": {
+          "$ref": "#/$defs/pepper"
+        },
+        "device_id": {
+          "$comment": "May be empty: an empty device identifier is a bound value distinct from an absent one.",
+          "type": "string"
+        },
+        "note": {
+          "$ref": "#/$defs/note"
+        },
+        "expected_hmac_sha256_hex": {
+          "$ref": "#/$defs/hex256"
+        },
+        "rule": {
+          "$ref": "#/$defs/ruleRef"
+        }
+      }
+    },
+    "parsingCase": {
+      "$comment": "An accepted token must publish what was parsed out of it; a rejected token must publish which rule rejected it. Neither may carry the other's fields, so that a case cannot half-specify its own expectation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "token",
+        "valid",
+        "note"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^p-[0-9]{2}$"
+        },
+        "token": {
+          "type": "string"
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "note": {
+          "$ref": "#/$defs/note"
+        },
+        "kid": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selector": {
+          "$ref": "#/$defs/base64url"
+        },
+        "rule": {
+          "$ref": "#/$defs/ruleRef"
+        }
+      },
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        },
+        "required": [
+          "valid"
+        ]
+      },
+      "then": {
+        "required": [
+          "kid",
+          "selector"
+        ],
+        "properties": {
+          "rule": false
+        }
+      },
+      "else": {
+        "required": [
+          "rule"
+        ],
+        "properties": {
+          "kid": false,
+          "selector": false
+        }
+      }
+    }
+  }
+}

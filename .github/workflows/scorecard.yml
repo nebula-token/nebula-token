@@ -1,0 +1,70 @@
+# OpenSSF Scorecard.
+#
+# NEBULA asks people to put it on an authentication path. Scorecard is the
+# standard way for their supply-chain review to answer "is this project run
+# carefully?" without reading the repository — so publishing the score is part
+# of the argument, and a regression in it is a defect like any other.
+#
+# The checks this repository is deliberately built to pass:
+#   Pinned-Dependencies  every action is a commit SHA (scripts/check-actions-pinned.mjs)
+#   Token-Permissions    contents: read at the top of every workflow
+#   Dangerous-Workflow   no pull_request_target, no untrusted checkout
+#   Packaging            .github/workflows/release.yml publishes from CI only
+#   Signed-Releases      npm --provenance and the attestations in release.yml
+#   CI-Tests / SAST      ci.yml and codeql.yml
+#
+# Fuzzing is NOT among them and this check will score zero. That is accurate:
+# SECURITY.md and README.md both state that the parsers have not been fuzzed
+# beyond the published vectors, and a Scorecard comment claiming otherwise would
+# be the only place in the repository that disagrees with them.
+
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "18 5 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Upload the result to the code-scanning dashboard.
+      security-events: write
+      # Publish the score so the badge and the public API can serve it.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishing requires the repository to be public. It is what lets
+          # api.securityscorecards.dev answer for this project, which is what a
+          # downstream reviewer actually queries.
+          publish_results: true
+
+      - name: Upload the raw result
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          sarif_file: results.sarif

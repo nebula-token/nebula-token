@@ -1,0 +1,16 @@
+{
+  "name": "@nebula-token/repo-scripts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository maintenance and CI gate scripts. Not published; not part of any package's dependency graph. The published packages remain dependency-free.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "check": "node version.mjs check && node validate-vectors.mjs && node check-licenses.mjs && node check-skills.mjs && node check-marketplace.mjs && node check-runtime-matrix.mjs && node check-agents-md.mjs && node check-links.mjs && node check-actions-pinned.mjs && node check-examples.mjs && node docker-test.mjs --check",
+    "docker": "node docker-test.mjs"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  }
+}
