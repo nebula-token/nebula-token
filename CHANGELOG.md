@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.0.1-rc.2] - 2026-07-30
+## [1.0.1-rc.3] - 2026-07-30
 
 Release automation only. `SPECIFICATION.md`, both vector files and all ten
 implementations are byte-identical to `1.0.0`.
@@ -38,5 +38,5 @@ implementations are byte-identical to `1.0.0`.
   window, family revocation, sender (device) binding, dual expiry clocks,
   pepper rotation via `kid`.
 
-[1.0.1-rc.2]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1-rc.2
+[1.0.1-rc.3]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1-rc.3
 [1.0.0]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.0

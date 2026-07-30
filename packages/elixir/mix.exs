@@ -29,7 +29,7 @@ defmodule NebulaToken.MixProject do
   def project do
     [
       app: :nebula_token,
-      version: "1.0.1-rc.2",
+      version: "1.0.1-rc.3",
       elixir: "~> 1.18",
       description:
         "Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding.",

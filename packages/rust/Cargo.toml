@@ -1,6 +1,6 @@
 [package]
 name = "nebula-token"
-version = "1.0.1-rc.2"
+version = "1.0.1-rc.3"
 edition = "2021"
 # MSRV. Bumping it is a minor-version change for this crate (VERSIONING.md).
 rust-version = "1.85"

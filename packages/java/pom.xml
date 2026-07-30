@@ -16,7 +16,7 @@
   -->
   <groupId>dev.nebulatoken</groupId>
   <artifactId>nebula-token</artifactId>
-  <version>1.0.1-rc.2</version>
+  <version>1.0.1-rc.3</version>
   <packaging>jar</packaging>
 
   <name>NEBULA Token</name>
@@ -68,7 +68,7 @@
     <connection>scm:git:https://github.com/nebula-token/nebula-token.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/nebula-token/nebula-token.git</developerConnection>
     <url>https://github.com/nebula-token/nebula-token</url>
-    <tag>v1.0.1-rc.2</tag>
+    <tag>v1.0.1-rc.3</tag>
   </scm>
 
   <issueManagement>
@@ -304,7 +304,19 @@
           <plugin>
             <groupId>org.sonatype.central</groupId>
             <artifactId>central-publishing-maven-plugin</artifactId>
-            <version>0.5.0</version>
+            <!-- 0.5.0 uploaded the bundle correctly and then died deserialising
+                 the reply: `UnrecognizedPropertyException: Unrecognized field
+                 "warnings" (class DeploymentApiResponse)`. Sonatype added a
+                 usage-limit `warnings` field to that response, and 0.5.0's model
+                 does not tolerate unknown properties, so a healthy deployment is
+                 reported as a build failure. 0.11.0's release notes name usage
+                 limit warnings explicitly.
+
+                 This is a SERVER-side change, so it will keep happening: pinning
+                 an old version of this plugin is not the conservative choice it
+                 looks like. The bundle for 1.0.1-rc.2 reached Central intact and
+                 had to be dropped by hand. -->
+            <version>0.11.0</version>
             <extensions>true</extensions>
             <configuration>
               <!-- Matches `server-id: central` in release.yml, which setup-java
