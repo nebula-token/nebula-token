@@ -435,6 +435,7 @@ jobs:
       run:
         working-directory: packages/rust
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # An empty secret is not an error to any of these tools: it is a bad
       # credential, and they fail on the network call. By then the registries
       # before this one in the chain have published versions that can never be
@@ -443,6 +444,16 @@ jobs:
       # environment — so the cheapest place is the first step of the job that
       # holds it. Two lines, and the difference between a blocked release and a
       # release stranded at registry N of 10.
+      #
+      # IT MUST STAY AFTER THE CHECKOUT, and that is not a stylistic preference.
+      # This job sets `defaults.run.working-directory` to its package directory,
+      # which applies to EVERY `run` step including this one. Placed first, the
+      # runner cannot even start bash — "No such file or directory" — because
+      # nothing has created that directory yet. 1.0.0 died exactly there, at job
+      # 3 of 10, with npm and PyPI already published and immutable: a guard
+      # written to prevent a partial release caused one. Moving it back up
+      # reintroduces that, and no gate in this repository simulates a runner, so
+      # nothing will tell you.
       - name: The credential for this registry must exist
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -456,7 +467,6 @@ jobs:
             exit 1
           fi
           echo "credential present"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, resolved 2026-07-25
         with:
           toolchain: stable
@@ -486,6 +496,7 @@ jobs:
       run:
         working-directory: packages/java
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # An empty secret is not an error to any of these tools: it is a bad
       # credential, and they fail on the network call. By then the registries
       # before this one in the chain have published versions that can never be
@@ -494,6 +505,16 @@ jobs:
       # environment — so the cheapest place is the first step of the job that
       # holds it. Two lines, and the difference between a blocked release and a
       # release stranded at registry N of 10.
+      #
+      # IT MUST STAY AFTER THE CHECKOUT, and that is not a stylistic preference.
+      # This job sets `defaults.run.working-directory` to its package directory,
+      # which applies to EVERY `run` step including this one. Placed first, the
+      # runner cannot even start bash — "No such file or directory" — because
+      # nothing has created that directory yet. 1.0.0 died exactly there, at job
+      # 3 of 10, with npm and PyPI already published and immutable: a guard
+      # written to prevent a partial release caused one. Moving it back up
+      # reintroduces that, and no gate in this repository simulates a runner, so
+      # nothing will tell you.
       - name: The credential for this registry must exist
         env:
           MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
@@ -513,7 +534,6 @@ jobs:
             exit 1
           fi
           echo "credential present"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Import the signing key
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
         with:
@@ -553,6 +573,7 @@ jobs:
       run:
         working-directory: packages/csharp
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # An empty secret is not an error to any of these tools: it is a bad
       # credential, and they fail on the network call. By then the registries
       # before this one in the chain have published versions that can never be
@@ -561,6 +582,16 @@ jobs:
       # environment — so the cheapest place is the first step of the job that
       # holds it. Two lines, and the difference between a blocked release and a
       # release stranded at registry N of 10.
+      #
+      # IT MUST STAY AFTER THE CHECKOUT, and that is not a stylistic preference.
+      # This job sets `defaults.run.working-directory` to its package directory,
+      # which applies to EVERY `run` step including this one. Placed first, the
+      # runner cannot even start bash — "No such file or directory" — because
+      # nothing has created that directory yet. 1.0.0 died exactly there, at job
+      # 3 of 10, with npm and PyPI already published and immutable: a guard
+      # written to prevent a partial release caused one. Moving it back up
+      # reintroduces that, and no gate in this repository simulates a runner, so
+      # nothing will tell you.
       - name: The credential for this registry must exist
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
@@ -574,7 +605,6 @@ jobs:
             exit 1
           fi
           echo "credential present"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           # One SDK, because the project targets one framework. The 8.0.x line
@@ -648,6 +678,7 @@ jobs:
       run:
         working-directory: packages/elixir
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # An empty secret is not an error to any of these tools: it is a bad
       # credential, and they fail on the network call. By then the registries
       # before this one in the chain have published versions that can never be
@@ -656,6 +687,16 @@ jobs:
       # environment — so the cheapest place is the first step of the job that
       # holds it. Two lines, and the difference between a blocked release and a
       # release stranded at registry N of 10.
+      #
+      # IT MUST STAY AFTER THE CHECKOUT, and that is not a stylistic preference.
+      # This job sets `defaults.run.working-directory` to its package directory,
+      # which applies to EVERY `run` step including this one. Placed first, the
+      # runner cannot even start bash — "No such file or directory" — because
+      # nothing has created that directory yet. 1.0.0 died exactly there, at job
+      # 3 of 10, with npm and PyPI already published and immutable: a guard
+      # written to prevent a partial release caused one. Moving it back up
+      # reintroduces that, and no gate in this repository simulates a runner, so
+      # nothing will tell you.
       - name: The credential for this registry must exist
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
@@ -669,7 +710,6 @@ jobs:
             exit 1
           fi
           echo "credential present"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           elixir-version: "1.18"
