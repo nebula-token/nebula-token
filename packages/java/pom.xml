@@ -16,7 +16,7 @@
   -->
   <groupId>dev.nebulatoken</groupId>
   <artifactId>nebula-token</artifactId>
-  <version>1.0.1-rc.1</version>
+  <version>1.0.1-rc.2</version>
   <packaging>jar</packaging>
 
   <name>NEBULA Token</name>
@@ -68,7 +68,7 @@
     <connection>scm:git:https://github.com/nebula-token/nebula-token.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/nebula-token/nebula-token.git</developerConnection>
     <url>https://github.com/nebula-token/nebula-token</url>
-    <tag>v1.0.1-rc.1</tag>
+    <tag>v1.0.1-rc.2</tag>
   </scm>
 
   <issueManagement>

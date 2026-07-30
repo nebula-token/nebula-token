@@ -14,7 +14,7 @@ authors:
     # The contact of record, shared with the package manifests and the paper.
     # SUPPORT.md says what each address is for.
     email: hello@nebulatoken.dev
-version: 1.0.1-rc.1
+version: 1.0.1-rc.2
 # Must equal the date of the 1.0.0 tag, together with the heading in
 # CHANGELOG.md. RELEASING.md carries the step that keeps the three in step.
 date-released: "2026-07-30"
