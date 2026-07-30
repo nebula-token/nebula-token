@@ -1,0 +1,77 @@
+# PEP 639 metadata (`license` as an SPDX expression, `license-files` as a list)
+# needs a build backend that emits Metadata-Version 2.4; hatchling gained it in
+# 1.27. An older hatchling silently falls back to the legacy `License:` field and
+# the wheel ships without the licence text.
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nebula-token"
+version = "1.0.0"
+description = "Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding. Stdlib only."
+readme = "README.md"
+# PEP 639: an SPDX expression, not a table. The file named here is what a
+# downstream SCA tool and a distro packager actually read — hatchling copies it
+# into the wheel's `.dist-info/licenses/` and records it as `License-File`.
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Matteo Teodori" }]
+requires-python = ">=3.11"
+keywords = ["refresh-token", "authentication", "security", "oauth2", "rfc9700", "token-rotation", "nebula"]
+# No "License :: OSI Approved :: ..." classifier: PEP 639 forbids carrying both
+# a licence expression and licence classifiers, and PyPI rejects the metadata.
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://nebulatoken.dev"
+Repository = "https://github.com/nebula-token/nebula-token"
+Documentation = "https://github.com/nebula-token/nebula-token/blob/main/SPECIFICATION.md"
+Changelog = "https://github.com/nebula-token/nebula-token/blob/main/CHANGELOG.md"
+Issues = "https://github.com/nebula-token/nebula-token/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nebula_token"]
+
+# The agent skill ships with the artefact, like the licence and the readme, and
+# it ships as the DIRECTORY a client installs — a client discovers a skill by
+# directory name, so `skills/nebula-token-python/SKILL.md` is carried whole:
+#
+#   cp -r "$(python -c 'import nebula_token,pathlib;print(pathlib.Path(nebula_token.__file__).parent)')"/skills/nebula-token-python ~/.claude/skills/
+#
+# `packages` only copies the importable directory, so a file outside it needs
+# force-include to reach the wheel at all; mapping it inside the package also
+# makes it locatable at runtime via importlib.resources.
+[tool.hatch.build.targets.wheel.force-include]
+"skills/nebula-token-python/SKILL.md" = "nebula_token/skills/nebula-token-python/SKILL.md"
+
+# The sdist is an explicit allow-list, not an exclude-list. Conformance is
+# verified from a repository checkout by design (RELEASING.md), so tests/ and
+# examples/ are deliberately absent from the published artefact; an allow-list
+# cannot forget to exclude something added later.
+[tool.hatch.build.targets.sdist]
+include = [
+  "/nebula_token",
+  "/README.md",
+  "/skills/nebula-token-python/SKILL.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Without this, a bare `pytest` from this directory fails collection with
+# ModuleNotFoundError: nothing puts the source tree (nor tests/behavior_runner.py)
+# on sys.path unless the package happens to be pip-installed first.
+pythonpath = [".", "tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["nebula_token", "tests", "examples"]

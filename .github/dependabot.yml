@@ -1,0 +1,144 @@
+# Dependabot: every ecosystem in the repository, plus the actions themselves.
+#
+# The published packages have no runtime dependencies — that is a design
+# constraint, not an accident — so almost everything below is dev and CI
+# tooling. It still matters: a compromised test-time dependency runs inside the
+# workflow that holds the publishing credentials.
+#
+# `github-actions` is the important one. Every action is pinned to a commit SHA
+# (scripts/check-actions-pinned.mjs enforces it), and a pinned SHA is a frozen
+# SHA unless something proposes the update. Dependabot is that something, and it
+# rewrites the trailing version comment along with the SHA.
+
+version: 2
+
+updates:
+  # ------------------------------------------------------------- CI itself
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # --------------------------------------------------------------- tooling
+
+  - package-ecosystem: npm
+    directory: /scripts
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, tooling]
+    commit-message:
+      prefix: "chore(scripts)"
+
+  # -------------------------------------------------------------- packages
+
+  - package-ecosystem: npm
+    directory: /packages/typescript
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, typescript]
+    commit-message:
+      prefix: "chore(typescript)"
+    groups:
+      dev:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /packages/python
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, python]
+    commit-message:
+      prefix: "chore(python)"
+
+  - package-ecosystem: gomod
+    directory: /packages/go
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, go]
+    commit-message:
+      prefix: "chore(go)"
+
+  - package-ecosystem: cargo
+    directory: /packages/rust
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, rust]
+    commit-message:
+      prefix: "chore(rust)"
+    groups:
+      crates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: maven
+    directory: /packages/java
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, java]
+    commit-message:
+      prefix: "chore(java)"
+
+  # The only composer.json is the ROOT one: Packagist reads a manifest from a
+  # repository root only, so /packages/php has none and never will. Pointed at
+  # that directory, Dependabot finds no manifest and silently does nothing.
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, php]
+    commit-message:
+      prefix: "chore(php)"
+
+  - package-ecosystem: nuget
+    directory: /packages/csharp
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, csharp]
+    commit-message:
+      prefix: "chore(csharp)"
+
+  - package-ecosystem: pub
+    directory: /packages/dart
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, dart]
+    commit-message:
+      prefix: "chore(dart)"
+
+  - package-ecosystem: bundler
+    directory: /packages/ruby
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, ruby]
+    commit-message:
+      prefix: "chore(ruby)"
+
+  - package-ecosystem: mix
+    directory: /packages/elixir
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, elixir]
+    commit-message:
+      prefix: "chore(elixir)"

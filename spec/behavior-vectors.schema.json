@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NEBULA behavioral vectors",
+  "$comment": "Structural contract for behavior-vectors.json. Steps are discriminated on `op`: each operation admits exactly the fields it uses and no others, so that a step naming a field the runner will ignore is a validation failure rather than a scenario that quietly tests less than it appears to. Cross-file semantics — requirement ids existing in SPECIFICATION.md, error codes being the ten of [N-38], bindings being defined before use — are asserted by scripts/validate-vectors.mjs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "description",
+    "spec_version",
+    "counts",
+    "peppers",
+    "defaults",
+    "runner",
+    "scenarios"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string", "minLength": 1 },
+    "spec_version": { "type": "integer", "minimum": 1 },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenarios", "unconditional"],
+      "properties": {
+        "scenarios": { "type": "integer", "minimum": 1 },
+        "unconditional": {
+          "$comment": "Scenarios with no `condition`. Every runner MUST execute all of these ([N-48]).",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "peppers": {
+      "$comment": "kid -> pepper. Keys are the kids the scenarios refer to.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/kid" },
+      "additionalProperties": { "type": "string", "minLength": 32 }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "now",
+        "absoluteTtlSeconds",
+        "idleTtlSeconds",
+        "reuseGraceSeconds",
+        "activeKid",
+        "peppers"
+      ],
+      "properties": {
+        "now": { "type": "integer" },
+        "absoluteTtlSeconds": { "type": "integer", "minimum": 1 },
+        "idleTtlSeconds": { "type": "integer", "minimum": 1 },
+        "reuseGraceSeconds": { "type": "integer", "minimum": 0 },
+        "activeKid": { "$ref": "#/$defs/kid" },
+        "peppers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/kid" }
+        }
+      }
+    },
+    "runner": {
+      "$comment": "Prose contract for a conforming runner. Normative for humans porting the suite; not machine-interpreted, except that `conditions` supplies the closed set of condition names a scenario may use.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ops", "token", "forge", "deviceIdKind", "condition", "conditions", "expect"],
+      "properties": {
+        "ops": { "$ref": "#/$defs/prose" },
+        "token": { "$ref": "#/$defs/prose" },
+        "forge": { "$ref": "#/$defs/prose" },
+        "deviceIdKind": { "$ref": "#/$defs/prose" },
+        "condition": { "type": "string", "minLength": 1 },
+        "conditions": { "$ref": "#/$defs/prose" },
+        "expect": { "$ref": "#/$defs/prose" }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/scenario" }
+    }
+  },
+  "$defs": {
+    "prose": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "kid": {
+      "$comment": "The grammar of [N-5]: base64url characters, at most MAX_KID_LENGTH bytes.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "bindingName": {
+      "$comment": "Names a token produced earlier in the same scenario.",
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$"
+    },
+    "errorCode": {
+      "$comment": "The ten codes of [N-38]. Frozen for the life of spec version 1 (COMPATIBILITY.md section 1).",
+      "type": "string",
+      "enum": [
+        "MALFORMED",
+        "UNKNOWN_KID",
+        "NOT_FOUND",
+        "VERIFIER_MISMATCH",
+        "REUSE_DETECTED",
+        "REVOKED",
+        "EXPIRED_ABSOLUTE",
+        "EXPIRED_IDLE",
+        "DEVICE_MISMATCH",
+        "CONFLICT"
+      ]
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "requirements", "steps"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "requirements": {
+          "$comment": "The requirements this scenario exercises. At least one: a scenario that cites nothing cannot be traced back to the specification, and scripts/validate-vectors.mjs builds spec/traceability.json from exactly this field.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^N-[1-9][0-9]*$" }
+        },
+        "condition": {
+          "$comment": "Executed only where the named condition holds. Must be a key of runner.conditions; a runner MUST report by id any conditional scenario it skipped ([N-48]).",
+          "type": "string",
+          "minLength": 1
+        },
+        "config": {
+          "$comment": "Overrides the top-level defaults for this scenario only.",
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "absoluteTtlSeconds": { "type": "integer", "minimum": 1 },
+            "idleTtlSeconds": { "type": "integer", "minimum": 1 },
+            "reuseGraceSeconds": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/step" }
+        }
+      }
+    },
+    "tokenRef": {
+      "$comment": "Either an earlier binding (optionally forged into an invalid variant of itself) or a literal string, used for MALFORMED cases. Never both: a step that supplied both would leave the runner to choose.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ref": { "$ref": "#/$defs/bindingName" },
+        "literal": { "type": "string" },
+        "forge": {
+          "type": "string",
+          "enum": ["verifier", "unknownKid", "unknownSelector"]
+        }
+      },
+      "oneOf": [
+        { "required": ["ref"], "properties": { "literal": false } },
+        { "required": ["literal"], "properties": { "ref": false, "forge": false } }
+      ]
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "ok": { "type": "boolean" },
+        "error": { "$ref": "#/$defs/errorCode" },
+        "generation": { "type": "integer", "minimum": 0 },
+        "kid": { "$ref": "#/$defs/kid" },
+        "sameFamilyAs": { "$ref": "#/$defs/bindingName" },
+        "sameExpiresAtAs": { "$ref": "#/$defs/bindingName" },
+        "idleEqualsExpires": { "type": "boolean" },
+        "hasUserId": { "type": "boolean" },
+        "hasFamilyId": { "type": "boolean" },
+        "revoked": { "type": "integer", "minimum": 0 }
+      },
+      "$comment": "An expectation naming an error must also say the operation failed, and vice versa: `error` without `ok: false` reads as a success that also has an error code.",
+      "allOf": [
+        {
+          "if": { "required": ["error"] },
+          "then": { "properties": { "ok": { "const": false } }, "required": ["ok"] }
+        },
+        {
+          "if": { "properties": { "ok": { "const": false } }, "required": ["ok"] },
+          "then": { "required": ["error"] }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "required": ["op"],
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": [
+            "issue",
+            "refresh",
+            "revokeToken",
+            "revokeFamilyOf",
+            "revokeUser",
+            "advance",
+            "reconfigure",
+            "failNextCas",
+            "expectStatusCounts",
+            "expectNoRawSecrets"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "op": { "const": "issue" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "userId", "bind"],
+            "properties": {
+              "op": true,
+              "userId": { "type": "string", "minLength": 1 },
+              "bind": { "$ref": "#/$defs/bindingName" },
+              "deviceId": { "type": "string" },
+              "deviceIdKind": { "type": "string", "enum": ["lone-surrogate"] },
+              "expect": { "$ref": "#/$defs/expect" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "refresh" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "token", "expect"],
+            "properties": {
+              "op": true,
+              "token": { "$ref": "#/$defs/tokenRef" },
+              "bind": { "$ref": "#/$defs/bindingName" },
+              "deviceId": { "type": "string" },
+              "deviceIdKind": { "type": "string", "enum": ["lone-surrogate"] },
+              "expect": { "$ref": "#/$defs/expect" }
+            },
+            "$comment": "A refresh that is expected to succeed must bind its result, otherwise the successor token is unreachable and the rotation is untestable."
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "revokeToken" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "token", "expect"],
+            "properties": {
+              "op": true,
+              "token": { "$ref": "#/$defs/tokenRef" },
+              "deviceId": { "type": "string" },
+              "expect": { "$ref": "#/$defs/expect" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "revokeFamilyOf" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "of", "expect"],
+            "properties": {
+              "op": true,
+              "of": { "$ref": "#/$defs/bindingName" },
+              "expect": { "$ref": "#/$defs/expect" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "revokeUser" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "userId", "expect"],
+            "properties": {
+              "op": true,
+              "userId": { "type": "string", "minLength": 1 },
+              "expect": { "$ref": "#/$defs/expect" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "advance" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "seconds"],
+            "properties": { "op": true, "seconds": { "type": "integer", "minimum": 1 } }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "reconfigure" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "peppers", "activeKid"],
+            "properties": {
+              "op": true,
+              "peppers": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "$ref": "#/$defs/kid" }
+              },
+              "activeKid": { "$ref": "#/$defs/kid" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "failNextCas" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "method"],
+            "properties": {
+              "op": true,
+              "method": { "type": "string", "enum": ["markRotated", "revokeIfActive"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "expectStatusCounts" } }, "required": ["op"] },
+          "then": {
+            "additionalProperties": false,
+            "required": ["op", "counts"],
+            "properties": {
+              "op": true,
+              "counts": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["active", "rotated", "revoked"],
+                "$comment": "All three statuses of [N-10], always. A partial assertion would let a record drift into an unnamed status unnoticed.",
+                "properties": {
+                  "active": { "type": "integer", "minimum": 0 },
+                  "rotated": { "type": "integer", "minimum": 0 },
+                  "revoked": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "expectNoRawSecrets" } }, "required": ["op"] },
+          "then": { "additionalProperties": false, "required": ["op"], "properties": { "op": true } }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,76 @@
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+# Go
+go/bin/
+# Rust
+target/
+Cargo.lock
+# Java
+*.class
+packages/java/target/
+# PHP
+vendor/
+composer.lock
+# .NET
+bin/
+obj/
+# Dart
+.dart_tool/
+pubspec.lock
+# Misc
+.DS_Store
+*.log
+.idea/
+.vscode/
+# Ruby
+Gemfile.lock
+*.gem
+# Elixir
+_build/
+deps/
+# `mix hex.build` writes the candidate tarball into packages/elixir. Every other
+# registry's local build output is already ignored below (*.tgz, *.nupkg,
+# *.crate, *.gem); this is the Hex one.
+nebula_token-*.tar
+# LaTeX
+*.aux
+*.out
+*.toc
+*.synctex.gz
+# latexmk's dependency database and file list, written by any local build of
+# docs/paper (the CI paper job builds in a container and commits nothing).
+*.fls
+*.fdb_latexmk
+nebula-token-*.tgz
+*.nupkg
+*.snupkg
+*.crate
+*.gem
+.mypy_cache/
+.ruff_cache/
+.tox/
+.phpunit.result.cache
+erl_crash.dump
+docs/paper/*.pdf
+
+# Agent/session state
+.claude/
+
+# The website (nebulatoken.dev) is excluded from this repository deliberately:
+# it is a marketing and demo surface with its own deploy cadence, and it must
+# never be mistaken for a conforming implementation of the specification.
+#
+# IT IS NOT YET IN A REPOSITORY OF ITS OWN. This line used to say it was, which
+# is the most dangerous kind of comment: it reads as "safe to delete, there is a
+# copy". There is no copy. `website/` on disk is untracked and unversioned, so
+# `git clean -xfd` in this tree destroys it with no way back. AGENTS.md carries
+# the same warning in its Never list; delete BOTH on the day the move happens.
+website/

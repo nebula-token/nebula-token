@@ -1,0 +1,24 @@
+name: nebula_token
+description: "Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding."
+version: 1.0.0
+homepage: https://nebulatoken.dev
+repository: https://github.com/nebula-token/nebula-token
+issue_tracker: https://github.com/nebula-token/nebula-token/issues
+documentation: https://github.com/nebula-token/nebula-token/blob/main/SPECIFICATION.md
+topics: [authentication, security, oauth2, refresh-token]
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+
+dependencies:
+  crypto: ^3.0.3
+
+dev_dependencies:
+  # A range, not a caret pin: the floor job runs Dart 3.9.0 (see
+  # environment.sdk and .github/runtime-matrix.json) and the stable job runs the
+  # current release, and those two resolve different lint majors. A range lets
+  # each pick the newest set it can, instead of holding the whole package to
+  # whatever the floor supports. Nothing here reaches a consumer:
+  # dev_dependencies are not published.
+  lints: ">=4.0.0 <7.0.0"
+  test: ^1.25.0

@@ -1,0 +1,137 @@
+# CodeQL static analysis.
+#
+# Six of the ten implementations are analysed here. Verified against GitHub's
+# supported-languages list, 2026-07, rather than assumed:
+#
+#   analysed   TypeScript, Python, Ruby, Go, Java, C#
+#   supported, not analysed   Rust — CodeQL support went GA in 2025 and this
+#              matrix predates it. Adding it is a real improvement and is
+#              deliberately NOT being done beside a release; it is the first
+#              post-1.0.0 change to this file.
+#   unsupported   PHP, Dart, Elixir. The docs are explicit — "CodeQL does not
+#              support languages that are not listed above. This includes, but is
+#              not limited to, PHP". A previous version of this comment claimed
+#              PHP was supported and excluded on judgement; it was not a judgement
+#              and there was nothing to exclude.
+#
+# The four not analysed rely on their own toolchains: clippy with -D warnings,
+# dart analyze --fatal-infos, phpunit with failOnWarning, and the conformance
+# suite in all four.
+#
+# `security-and-quality` rather than the default suite: this is an
+# authentication library, and the extra queries cost minutes we can afford.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # ci.yml declares `merge_group`, so a merge queue is in use. Without this,
+  # every queue entry waits on six Analyze checks that are never reported.
+  merge_group:
+  schedule:
+    # Weekly, because a new query can find an old bug in code nobody has touched.
+    - cron: "27 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+          - language: ruby
+            build-mode: none
+          - language: go
+            build-mode: manual
+          - language: java-kotlin
+            build-mode: manual
+          - language: csharp
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The compiled languages need their toolchain present before the build,
+      # and at the floor each manifest declares — analysing a newer language
+      # level than we support would report on code users never compile.
+      - if: matrix.language == 'go'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25"
+          cache-dependency-path: packages/go/go.mod
+      - if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Initialize
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-and-quality
+
+      # `manual`, not `autobuild`, for all three compiled languages.
+      #
+      # autobuild looks for a build file in the ROOT of the checkout, and this
+      # repository deliberately has none: `go.mod` is in packages/go, the pom is
+      # in packages/java, the solution is in packages/csharp. The root holds one
+      # composer.json, because Packagist reads a manifest from a repository root
+      # only. So autobuild finds nothing and dies with "Could not detect a
+      # suitable build command for the source checkout" — not a build failure, a
+      # discovery failure, and no amount of toolchain setup fixes it.
+      #
+      # Naming the build is also what keeps the analysis worth running. The
+      # alternative, `build-mode: none`, extracts without resolving
+      # dependencies, and this workflow runs `security-and-quality` on an
+      # authentication library: a query that cannot see a type cannot reason
+      # about it. These three builds cost seconds each.
+      #
+      # Main sources only, and for C# that means naming the PROJECT: `dotnet build`
+      # in packages/csharp resolves NebulaToken.sln, which carries the test project
+      # too, so the solution form extracts the test doubles as well. Java's
+      # `compile` (not `test-compile`) is main-only for the same reason. Alerts on
+      # test doubles are noise on a dashboard that supply-chain reviewers read, and
+      # the conformance suite is what says the tests are right.
+      - if: matrix.language == 'go'
+        name: Build for extraction
+        working-directory: packages/go
+        run: go build ./...
+      - if: matrix.language == 'java-kotlin'
+        name: Build for extraction
+        working-directory: packages/java
+        run: mvn -B -ntp compile
+      - if: matrix.language == 'csharp'
+        name: Build for extraction
+        working-directory: packages/csharp
+        run: dotnet build src/NebulaToken/NebulaToken.csproj -c Release
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: /language:${{ matrix.language }}

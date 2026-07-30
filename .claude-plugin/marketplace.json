@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "nebula-token",
+  "description": "The ten NEBULA agent skills, served from the specification repository they are checked against. Each entry exposes one language implementation's skill; the skill files are not copied here, they are read in place from packages/<language>/skills/.",
+  "owner": {
+    "name": "Matteo Teodori",
+    "email": "hello@nebulatoken.dev",
+    "url": "https://github.com/nebula-token/nebula-token"
+  },
+  "plugins": [
+    {
+      "name": "nebula-token-typescript",
+      "source": "./packages/typescript",
+      "description": "Add login sessions with rotating refresh tokens to a TypeScript backend running on Node.js, or replace hand-rolled and JWT refresh tokens, using nebula-token from npm. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-python",
+      "source": "./packages/python",
+      "description": "Add login sessions with rotating refresh tokens to a Python backend, or replace hand-rolled and JWT refresh tokens, using nebula-token from PyPI. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-go",
+      "source": "./packages/go",
+      "description": "Add login sessions with rotating refresh tokens to a Go backend, or replace hand-rolled and JWT refresh tokens, using github.com/nebula-token/nebula-token/packages/go. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-rust",
+      "source": "./packages/rust",
+      "description": "Add login sessions with rotating refresh tokens to a Rust backend, or replace hand-rolled and JWT refresh tokens, using nebula-token from crates.io. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-java",
+      "source": "./packages/java",
+      "description": "Add login sessions with rotating refresh tokens to a Java, Kotlin or Scala backend, or replace hand-rolled and JWT refresh tokens, using dev.nebulatoken:nebula-token from Maven Central. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-php",
+      "source": "./packages/php",
+      "description": "Add login sessions with rotating refresh tokens to a PHP backend, or replace hand-rolled and JWT refresh tokens, using nebula-token/nebula-token from Packagist. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-csharp",
+      "source": "./packages/csharp",
+      "description": "Add login sessions with rotating refresh tokens to a C# or .NET backend, or replace hand-rolled and JWT refresh tokens, using NebulaToken from NuGet. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-dart",
+      "source": "./packages/dart",
+      "description": "Add login sessions with rotating refresh tokens to a Dart backend, or replace hand-rolled and JWT refresh tokens, using nebula_token from pub.dev. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-ruby",
+      "source": "./packages/ruby",
+      "description": "Add login sessions with rotating refresh tokens to a Ruby backend, or replace hand-rolled and JWT refresh tokens, using nebula-token from RubyGems. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    },
+    {
+      "name": "nebula-token-elixir",
+      "source": "./packages/elixir",
+      "description": "Add login sessions with rotating refresh tokens to an Elixir backend, or replace hand-rolled and JWT refresh tokens, using nebula_token from Hex. Covers reuse detection, revocation and the production store contract.",
+      "strict": false
+    }
+  ]
+}

@@ -1,0 +1,367 @@
+# NEBULA conformance harness — ten languages, one command, no local toolchains.
+#
+# WHY THIS EXISTS
+#
+# The central claim of this repository is that ten independent implementations
+# agree, and that the agreement is enforced by two shared vector files rather
+# than by prose. Until this file existed, checking that claim required ten
+# toolchains on one machine. Nobody has ten toolchains. While 1.0.0 was being
+# finished, four of the ten — Go, Rust, Ruby and Elixir — could not be executed
+# on the maintainer's machine at all, and unrunnable ports are exactly how ports
+# drift: the vectors are shared, but nobody local can run them.
+#
+# So a contributor, a reviewer, a security auditor or a third-party porter can
+# run the entire conformance matrix with one command and no toolchain:
+#
+#     node scripts/docker-test.mjs           # all ten
+#     node scripts/docker-test.mjs go        # one
+#
+# THE RULES THIS FILE FOLLOWS
+#
+# 1. Ten official upstream images — never one image containing ten toolchains.
+#    Ten official images are smaller, are cached by the daemon, are rebuilt for
+#    security by their upstreams, and need no maintenance from this project.
+#
+# 2. Every image is pinned BY DIGEST, with its tag and the toolchain version it
+#    actually contains in a trailing comment. This is the discipline
+#    .github/workflows/ci.yml applies to actions and container images, enforced
+#    there by scripts/check-actions-pinned.mjs: a tag is mutable, a digest is
+#    not. `node scripts/docker-test.mjs --check` enforces it here.
+#
+# 3. Every image is the DECLARED FLOOR from .github/runtime-matrix.json, not the
+#    newest release of that language. A harness that tests whatever tag is
+#    newest proves nothing about the support matrix the manifests claim. The
+#    `x-floor` field on each service is held equal to the lowest version in
+#    .github/runtime-matrix.json by --check, so raising a floor there fails this
+#    file until the image moves with it.
+#
+# 4. The repository is bind-mounted READ-ONLY at /repo. A conformance run must
+#    not be able to modify the tree it is judging, and no container may leave
+#    build output in your working copy. Each service stages what it needs into
+#    /work, a tmpfs, via docker/stage.sh — see that file for why a copy is
+#    unavoidable (almost every toolchain writes inside the package directory).
+#
+# 5. What is mounted is the REPOSITORY ROOT, not the package directory. Every
+#    conformance runner in all ten languages locates the vectors by walking up
+#    from its own source file until it finds spec/test-vectors.json. Mount a
+#    package and all ten fail — not with a conformance error, with "vectors not
+#    found".
+#
+# 6. Each service runs the commands .github/workflows/ci.yml runs for that
+#    language. Where a line must differ it carries a `# not-in-ci:` comment
+#    giving the reason, and `node scripts/docker-test.mjs --check` fails on any
+#    divergence that is not explained that way. Ten services drifting away from
+#    CI would be a harness that certifies the wrong thing.
+#
+# SCOPE. The conformance suites: install, build, test. Formatting, linting,
+# packaging checks and the example-template compile steps stay in CI — they are
+# single-toolchain checks that say nothing about whether ten implementations
+# agree, and doubling them here would double the harness's runtime for no added
+# evidence.
+#
+# NOTE ON `$$`. Compose interpolates `${...}` itself, so a literal shell `$` is
+# written `$$`. Only the Ruby service needs it.
+
+name: nebula-conformance
+
+# Rules 4 and 5, in one place: the repository root, read-only, at the path every
+# runner expects to be able to walk up to.
+x-repo: &repo "../:/repo:ro"
+
+# Build output goes to a tmpfs, so it cannot reach the working tree and every run
+# starts clean. The packages are dependency-free, so this stays small — tens of
+# megabytes. Downloaded dependencies live in the per-language cache volume
+# instead, which is what makes a second run fast.
+#
+# `exec` IS LOAD-BEARING, and its absence is not a subtle failure. Docker mounts
+# --tmpfs with `noexec` by default, and a staged package tree is not only read —
+# it is executed from: node_modules/.bin/tsc and node_modules/esbuild/bin/esbuild,
+# vendor/bin/phpunit, and any toolchain that shells out to a binary it just
+# installed. Without this option npm ci dies with EACCES on esbuild and PHPUnit
+# exits 126, in an image where both are installed and correct. The option is
+# scoped to this tmpfs; nothing under /repo becomes executable, and /repo stays
+# read-only.
+x-work: &work "/work:exec"
+
+services:
+  # ---------------------------------------------------------------- typescript
+
+  typescript:
+    image: node@sha256:5647be709086c696ff32edaaf1c70cd26d1da6ab2b39c32f3c7b4c4a31957e37 # node:22 — Node 22.23.1
+    x-floor: node 22
+    working_dir: /work/packages/typescript
+    init: true
+    volumes:
+      - *repo
+      - nebula-cache-typescript:/cache
+    tmpfs:
+      - *work
+    environment:
+      npm_config_cache: /cache
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh typescript # not-in-ci: CI's checkout is writable; /repo is not
+        npm ci
+        npm run build
+        npm test
+
+  # -------------------------------------------------------------------- python
+
+  python:
+    image: python@sha256:c7220863385ee39fb6d822da81f4469d0cd33ff893d92ce94105e5c3f4b95fe2 # python:3.11 — Python 3.11.15
+    x-floor: python 3.11
+    working_dir: /work/packages/python
+    init: true
+    volumes:
+      - *repo
+      - nebula-cache-python:/cache
+    tmpfs:
+      - *work
+    environment:
+      PIP_CACHE_DIR: /cache
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh python # not-in-ci: CI's checkout is writable; /repo is not
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest
+        pytest -q
+
+  # ------------------------------------------------------------------------ go
+
+  go:
+    # GOTOOLCHAIN=local in this image: if packages/go/go.mod ever names a version
+    # newer than the floor, this service fails loudly instead of silently
+    # downloading a newer toolchain and proving nothing about Go 1.25.
+    image: golang@sha256:9006890ecba0a168034d99516084099ae3114d9f2b7d6572c77f2dde57ebc980 # golang:1.25 — Go 1.25.12
+    x-floor: go 1.25
+    working_dir: /work/packages/go
+    init: true
+    volumes:
+      - *repo
+      - nebula-cache-go:/cache
+    tmpfs:
+      - *work
+    environment:
+      GOMODCACHE: /cache/mod
+      GOCACHE: /cache/build
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh go # not-in-ci: CI's checkout is writable; /repo is not
+        go build ./...
+        go vet ./...
+        go test -race -count=1 ./...
+
+  # ---------------------------------------------------------------------- rust
+
+  rust:
+    image: rust@sha256:e51d0265072d2d9d5d320f6a44dde6b9ef13653b035098febd68cce8fa7c0bc4 # rust:1.85 — Rust 1.85.1, the MSRV
+    x-floor: rust 1.85
+    working_dir: /work/packages/rust
+    init: true
+    volumes:
+      - *repo
+      # CARGO_HOME is /usr/local/cargo in this image; only the registry needs to
+      # survive between runs. CARGO_TARGET_DIR is left alone, so target/ lands in
+      # the tmpfs under /work.
+      - nebula-cache-rust:/usr/local/cargo/registry
+    tmpfs:
+      - *work
+    environment:
+      CARGO_TERM_COLOR: always
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh rust # not-in-ci: CI's checkout is writable; /repo is not
+        cargo test
+
+  # ---------------------------------------------------------------------- java
+
+  java:
+    # The maven image carries the same JDK distribution CI asks for (temurin), so
+    # a difference between this run and CI's cannot be the JDK vendor.
+    image: maven@sha256:1ed5d1f54416b706707b4f3238f63a20bb06aab27c6d240090a2bb9ad895ed45 # maven:3.9-eclipse-temurin-17 — Temurin jdk-17.0.19+10
+    x-floor: java 17
+    working_dir: /work/packages/java
+    init: true
+    volumes:
+      - *repo
+      # MAVEN_CONFIG is /root/.m2 in this image, which is also the local
+      # repository. Caching it here is what keeps `mvn verify` from downloading
+      # the plugin world on every run — and it means the command stays exactly
+      # CI's, with no -Dmaven.repo.local bolted on.
+      - nebula-cache-java:/root/.m2
+    tmpfs:
+      - *work
+    environment:
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh java # not-in-ci: CI's checkout is writable; /repo is not
+        mvn -B -ntp verify
+
+  # ----------------------------------------------------------------------- php
+
+  php:
+    image: php@sha256:2a3f699b6cb31e5638c5432e4d37d4047853ba6351a692c91e0a073af00a55cc # php:8.3-cli — PHP 8.3.32
+    x-floor: php 8.3
+    working_dir: /work/packages/php
+    init: true
+    volumes:
+      - *repo
+      - nebula-cache-php:/cache
+    tmpfs:
+      - *work
+    environment:
+      COMPOSER_CACHE_DIR: /cache
+      COMPOSER_ALLOW_SUPERUSER: "1"
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh php # not-in-ci: CI's checkout is writable; /repo is not
+        cd /work # not-in-ci: PHP's composer project root is the REPOSITORY root — Packagist reads composer.json from a repository root only, so there is one manifest and it is /composer.json. CI's steps already default to the checkout root; working_dir above still names the package because that is the harness-wide invariant.
+        apt-get -qq update && apt-get -qq install -y --no-install-recommends unzip # not-in-ci: shivammathur/setup-php's job. The official php image ships neither the zip extension nor unzip, and composer cannot expand a dist archive without one of them.
+        curl -fsS -o /tmp/composer.phar https://getcomposer.org/download/2.10.2/composer.phar # not-in-ci: setup-php installs composer for CI. A downloaded executable gets the same treatment as an image here: a pinned version, verified before it runs.
+        echo "5ee7125f8a30a34d246cefdc0bc85b8a783b28f2aec968994118512350d28027  /tmp/composer.phar" | sha256sum -c - # not-in-ci: the checksum published for composer 2.10.2 — the phar is verified, and only then installed
+        install -m 0755 /tmp/composer.phar /usr/local/bin/composer # not-in-ci: installed under the name CI's step calls, so the two commands below stay byte-identical to CI's
+        composer install --no-progress --no-interaction --prefer-dist
+        vendor/bin/phpunit -c packages/php/phpunit.xml
+
+  # -------------------------------------------------------------------- csharp
+
+  csharp:
+    image: mcr.microsoft.com/dotnet/sdk@sha256:ed034a8bf0b24ded0cbbac07e17825d8e9ebfe21e308191d0f7421eaf5ad4664 # mcr.microsoft.com/dotnet/sdk:10.0 — SDK 10.0.302, net10.0
+    x-floor: dotnet net10.0
+    working_dir: /work/packages/csharp
+    init: true
+    volumes:
+      - *repo
+      - nebula-cache-csharp:/cache
+    tmpfs:
+      - *work
+    environment:
+      NUGET_PACKAGES: /cache
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh csharp # not-in-ci: CI's checkout is writable; /repo is not
+        dotnet restore
+        dotnet build -c Release --no-restore
+        dotnet test -c Release --no-build
+
+  # ---------------------------------------------------------------------- dart
+
+  dart:
+    image: dart@sha256:4553ec26e16610349e875f57a5bf75e19fa4a57d01bc86bbfc7cecec81d5ee35 # dart:3.9.0-sdk — Dart 3.9.0, the exact environment.sdk floor
+    x-floor: dart 3.9.0
+    working_dir: /work/packages/dart
+    init: true
+    volumes:
+      - *repo
+      - nebula-cache-dart:/cache
+    tmpfs:
+      - *work
+    environment:
+      PUB_CACHE: /cache
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh dart # not-in-ci: CI's checkout is writable; /repo is not
+        dart pub get
+        dart test
+
+  # ---------------------------------------------------------------------- ruby
+
+  ruby:
+    # No cache volume: the suite uses only gems bundled with the runtime, which
+    # is the point of a dependency-free package.
+    image: ruby@sha256:52557f527955fb8ea78bd2a196f4d5eb8fb71fd69a38cbbb50b70ca4a63457c5 # ruby:3.3 — Ruby 3.3.12
+    x-floor: ruby 3.3
+    working_dir: /work/packages/ruby
+    init: true
+    volumes:
+      - *repo
+    tmpfs:
+      - *work
+    environment:
+      CI: "true"
+    command:
+      # bash, not sh: CI globs the test files with `shopt -s nullglob` and a bash
+      # array, and running a different loop here would be a different test
+      # selection. `$$` is a literal `$` — see the note at the top of this file.
+      - bash
+      - -euc
+      - |
+        sh /repo/docker/stage.sh ruby # not-in-ci: CI's checkout is writable; /repo is not
+        shopt -s nullglob
+        files=(test/*_test.rb)
+        if [ $${#files[@]} -eq 0 ]; then echo "no test/*_test.rb files found" >&2; exit 1; fi # not-in-ci: CI's guard, on one line — its ::error annotation is GitHub-only
+        for f in "$${files[@]}"; do echo "--- $$f"; ruby -Ilib "$$f"; done
+
+  # -------------------------------------------------------------------- elixir
+
+  elixir:
+    # OTP 25, not the newest OTP this Elixir supports: :crypto.hash_equals/2
+    # ([N-31]) appears in 25 and mix.exs raises below it, so the floor leg is
+    # what exercises that guard. See .github/runtime-matrix.json.
+    image: elixir@sha256:64e3f879a3dae05b4bec870438a9b66c7d2bf500d45982823864df6c1c2d1701 # elixir:1.18-otp-25 — Elixir 1.18.4 on OTP 25.3.2.21
+    x-floor: elixir 1.18
+    working_dir: /work/packages/elixir
+    init: true
+    volumes:
+      - *repo
+      - nebula-cache-elixir:/cache
+    tmpfs:
+      - *work
+    environment:
+      MIX_HOME: /cache/mix
+      HEX_HOME: /cache/hex
+      CI: "true"
+    command:
+      - sh
+      - -euc
+      - |
+        sh /repo/docker/stage.sh elixir # not-in-ci: CI's checkout is writable; /repo is not
+        mix local.hex --force --if-missing # not-in-ci: erlef/setup-beam installs Hex for CI. The official elixir image does not ship it, and `mix deps.get` cannot fetch the test-only JSON decoder without it.
+        mix deps.get
+        mix test
+
+volumes:
+  # One cache per language, so a failure in one cannot corrupt another and any
+  # single language can be reset on its own:
+  #
+  #     docker volume rm nebula-conformance_nebula-cache-rust
+  #
+  # These hold downloaded dependencies only. Build output never comes here — it
+  # goes to the /work tmpfs and dies with the container.
+  nebula-cache-typescript:
+  nebula-cache-python:
+  nebula-cache-go:
+  nebula-cache-rust:
+  nebula-cache-java:
+  nebula-cache-php:
+  nebula-cache-csharp:
+  nebula-cache-dart:
+  nebula-cache-elixir:

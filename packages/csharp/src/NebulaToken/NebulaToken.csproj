@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      One TFM, singular: .NET 8 LTS support ends 2026-11-10 and .NET 9 with it,
+      leaving net10.0 as the only framework still patched a year from now, which
+      is the floor rule in .github/runtime-matrix.json. Dropping net8.0 also
+      removes the SDK-8-and-SDK-10-side-by-side requirement this project used to
+      carry: one SDK now restores, builds and tests the whole package, in CI and
+      in docker/compose.yml alike.
+    -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      Ships in the package alongside the assembly; IntelliSense reads it.
+      CS1591 is suppressed rather than answered: turning the doc file on with
+      TreatWarningsAsErrors makes every still-undocumented public member — enum
+      cases, the Nebula constants, the interface re-declarations on
+      MemoryRefreshTokenStore — a build error, and this workstream is packaging
+      metadata, not a documentation pass on the sources. The XML file is
+      produced and shipped; filling those gaps and removing this NoWarn is
+      tracked separately.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <PackageId>NebulaToken</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Matteo Teodori</Authors>
+    <Description>Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding.</Description>
+    <!-- A single SPDX identifier. PackageLicenseExpression is the only form
+         nuget.org indexes; PackageLicenseUrl has been deprecated since 2019. -->
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://nebulatoken.dev</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/nebula-token/nebula-token</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>refresh-token;authentication;security;oauth2;rfc9700;token-rotation</PackageTags>
+
+    <!--
+      Reproducibility and debuggability. ContinuousIntegrationBuild normalises
+      the source paths embedded in the PDB, which is only correct on a build
+      machine — enabling it locally would make a developer's own build
+      undebuggable, so it follows the CI environment variable rather than being
+      hardcoded. PublishRepositoryUrl + EmbedUntrackedSources are what make the
+      snupkg on symbols.nuget.org resolve back to this commit.
+    -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(ContinuousIntegrationBuild)' == '' AND '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The .nupkg must carry the licence text and the readme. A
+      PackageLicenseExpression alone puts a string on nuget.org and nothing in
+      the artefact, which is what blocks a distro packager and fails SCA intake.
+      Pack="true" with PackagePath="" places each at the package root.
+    -->
+    <None Include="../../README.md" Pack="true" PackagePath="" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <!--
+      The agent skill ships with the package for the same reason the readme
+      does: a consumer (or a coding agent working in a consumer's tree) should
+      be able to read how to integrate this correctly from the artefact itself,
+      without fetching the repository. scripts/check-skills.mjs asserts it.
+
+      PackagePath is the skill DIRECTORY, not the package root: a client
+      discovers a skill by directory name, so the .nupkg reproduces
+      skills/nebula-token-csharp/SKILL.md and a consumer can copy that directory
+      out of the extracted package straight into their skills folder. A bare
+      SKILL.md at the root would have to be repackaged by hand first.
+    -->
+    <None Include="../../skills/nebula-token-csharp/SKILL.md" Pack="true" PackagePath="skills/nebula-token-csharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      SourceLink. The .NET 8+ SDK carries the GitHub provider in-box, so this
+      reference is what pins it for anyone building with an older SDK; it never
+      reaches a consumer (PrivateAssets="all", and it is a development
+      dependency).
+    -->
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,898 @@
+# NEBULA continuous integration.
+#
+# This workflow is what the phrase "a runtime is supported" means
+# (COMPATIBILITY.md section 7), and what "conforming" means (SPECIFICATION.md
+# [N-47]). It is also, via `workflow_call`, the gate release.yml must clear
+# before a single registry is touched — so nothing here is decorative.
+#
+# Two rules govern edits:
+#
+#   1. Every third-party action is pinned to a full commit SHA, with its version
+#      in a trailing comment. A tag is mutable and this workflow is reachable
+#      from one holding publishing credentials. scripts/check-actions-pinned.mjs
+#      fails the build on any exception.
+#   2. The version matrices are not written here. They come from
+#      .github/runtime-matrix.json, which scripts/check-runtime-matrix.mjs holds
+#      equal to the floors declared in the package manifests and to SUPPORT.md.
+#      Adding a version here alone does nothing; changing a manifest alone fails.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+  # Weekly, Monday 05:00 UTC. ONE thing needs a run that no push triggers: the
+  # `docker-harness` job's full ten-language pass in clean official images at the
+  # declared floors — on a push it runs `--check` only.
+  #
+  # The `stable`-channel legs of Go, Rust and Dart run on every push, not just
+  # here; runtime-matrix.json lists them unconditionally and no leg carries an
+  # event guard. What the schedule adds for them is time, not coverage: a
+  # toolchain released on a Tuesday is caught within the week even if nobody
+  # pushes. An earlier version of this comment said they were schedule-only,
+  # which invited "restoring" that with an `if:` and silently deleting stable
+  # coverage from every pull request.
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_call:
+    outputs:
+      conformance:
+        description: >-
+          "ok" only when every job in this workflow succeeded. release.yml
+          requires it, which is how RELEASING.md's "never publish a package
+          whose conformance suite did not run in that same CI invocation" is
+          enforced mechanically rather than by discipline.
+        value: ${{ jobs.ci-ok.outputs.conformance }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Supersede pull-request runs; never cancel a run on main, nor one a release
+  # workflow is waiting on.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  # ---------------------------------------------------------------- matrices
+
+  config:
+    name: Runtime matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      node: ${{ steps.matrix.outputs.node }}
+      python: ${{ steps.matrix.outputs.python }}
+      go: ${{ steps.matrix.outputs.go }}
+      rust: ${{ steps.matrix.outputs.rust }}
+      java: ${{ steps.matrix.outputs.java }}
+      php: ${{ steps.matrix.outputs.php }}
+      dotnet: ${{ steps.matrix.outputs.dotnet }}
+      dart: ${{ steps.matrix.outputs.dart }}
+      ruby: ${{ steps.matrix.outputs.ruby }}
+      elixir: ${{ steps.matrix.outputs.elixir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Expand .github/runtime-matrix.json into job matrices
+        id: matrix
+        run: |
+          set -euo pipefail
+          jq . .github/runtime-matrix.json > /dev/null
+          for key in node python go rust java php dotnet dart ruby elixir; do
+            value=$(jq -c --arg k "$key" '.[$k] // error("runtime-matrix.json has no key \($k)")' .github/runtime-matrix.json)
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+            echo "$key: $value"
+          done
+
+  # ------------------------------------------------------- repository gates
+
+  gates:
+    name: Repository gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+      - run: npm ci
+        working-directory: scripts
+
+      - name: Every manifest carries the same version
+        run: node scripts/version.mjs check
+
+      - name: Conformance artefacts are valid, complete and traceable
+        run: node scripts/validate-vectors.mjs
+
+      - name: Every package ships the root licence, and declares it
+        run: node scripts/check-licenses.mjs
+
+      - name: Every package ships its agent skill, installable as it stands
+        # Asserts the same class of thing the licence gate does — that the
+        # inclusion list in each manifest actually names the path — plus that
+        # there are exactly ten SKILL.md files, each inside the directory a
+        # client installs it as (packages/<lang>/skills/nebula-token-<lang>/)
+        # with a frontmatter name to match, and that no skill has dropped a rule
+        # an agent would violate while producing code that compiles ([N-21],
+        # [N-30], [N-35], [N-36], [N-39], [N-14]/[N-46]).
+        run: node scripts/check-skills.mjs
+
+      - name: The ten skills are installable by the standard tooling
+        # .claude-plugin/marketplace.json is what makes `npx skills add` and
+        # `/plugin install` find them; without it both fall back to a recursive
+        # scan of the whole tree. It is also the second place that names all ten,
+        # so this asserts BOTH directions — no entry without a skill, no skill
+        # without an entry — plus the two fields whose absence breaks an install
+        # with no local symptom: `strict: false`, and a `source` beginning "./".
+        run: node scripts/check-marketplace.mjs
+
+      - name: CI tests exactly what the manifests claim
+        run: node scripts/check-runtime-matrix.mjs
+
+      - name: AGENTS.md still matches the repository it describes
+        # Root-only by design: Codex discovers root -> cwd, so a per-package
+        # AGENTS.md is invisible to an agent launched at the repository root.
+        # This also holds CLAUDE.md to a one-line import, because Claude Code
+        # does not read AGENTS.md and two copies would drift.
+        run: node scripts/check-agents-md.mjs
+
+      - name: Documentation links resolve
+        run: node scripts/check-links.mjs
+
+      - name: Every action is pinned to a commit SHA
+        run: node scripts/check-actions-pinned.mjs
+
+      - name: Every example store template is compiled by some job
+        run: node scripts/check-examples.mjs
+
+      - name: The workflows themselves lint
+        # actionlint checks expression syntax, action inputs, matrix references
+        # and — via the shellcheck bundled in this image — the shell inside every
+        # `run:` block. A workflow defect otherwise surfaces only when the
+        # workflow runs, which for release.yml means during a release.
+        uses: docker://rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 # 1.7.12
+        with:
+          args: -color
+
+  # ------------------------------------------------------------- formatting
+  #
+  # Formatting was previously unchecked in every language, so packages drifted
+  # while CI stayed green. gofmt, rustfmt and dart format are unconditional
+  # because their toolchains define one canonical form and there is nothing to
+  # configure. The rest run only where the package has opted in by committing a
+  # configuration file: a formatter imposed by CI on a package that never chose
+  # one is a thousand-line diff nobody asked for.
+
+  format:
+    name: Formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: packages/go/go.mod
+      - name: gofmt
+        working-directory: packages/go
+        run: |
+          set -euo pipefail
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error title=gofmt::not gofmt-clean. Run: gofmt -w packages/go"
+            echo "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+          echo "all Go files are gofmt-clean"
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, resolved 2026-07-25
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: cargo fmt
+        working-directory: packages/rust
+        run: cargo fmt --all --check
+
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+        with:
+          sdk: stable
+      # `dart format` is not self-contained: it reads analysis_options.yaml for a
+      # `formatter:` section and FOLLOWS its `include:`, which here is
+      # `package:lints/recommended.yaml`. Resolving a package: URI needs
+      # .dart_tool/package_config.json, which a fresh checkout does not have — so
+      # without this step the formatter silently falls back to its defaults
+      # instead of the configuration `dart analyze` sees in the `dart` job.
+      # Neither file sets `formatter:` today, so the two agree at page width 80;
+      # the day one does, they would disagree and nothing would say so.
+      - name: dart pub get (dart format resolves analysis_options through it)
+        working-directory: packages/dart
+        run: dart pub get
+      - name: dart format
+        working-directory: packages/dart
+        run: dart format --output=none --set-exit-if-changed .
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: ruff / black, where configured
+        working-directory: packages/python
+        run: |
+          set -euo pipefail
+          if grep -q '^\[tool\.ruff' pyproject.toml || [ -f ruff.toml ] || [ -f .ruff.toml ]; then
+            pipx run ruff format --check .
+            pipx run ruff check .
+          elif grep -q '^\[tool\.black\]' pyproject.toml; then
+            pipx run black --check .
+          else
+            echo "no [tool.ruff]/[tool.black] configuration — skipped."
+            echo "Add one to packages/python/pyproject.toml to enable this gate."
+          fi
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: "8.5"
+          coverage: none
+          tools: composer
+      - name: php-cs-fixer, where configured
+        # Run from the repository root, because that is where composer.json and
+        # therefore vendor/ live: Packagist reads composer.json from a repository
+        # root only, so the PHP package's one manifest is the root one.
+        run: |
+          set -euo pipefail
+          if ls .php-cs-fixer*.php >/dev/null 2>&1; then
+            composer install --no-progress --no-interaction
+            vendor/bin/php-cs-fixer fix --dry-run --diff packages/php
+          else
+            echo "no .php-cs-fixer.dist.php — skipped."
+          fi
+
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "4.0"
+      - name: rubocop, where configured
+        working-directory: packages/ruby
+        run: |
+          set -euo pipefail
+          if [ -f .rubocop.yml ]; then
+            gem install rubocop --no-document
+            rubocop
+          else
+            echo "no .rubocop.yml — skipped."
+          fi
+
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          elixir-version: "1.20"
+          otp-version: "28"
+      - name: mix format, where configured
+        working-directory: packages/elixir
+        run: |
+          set -euo pipefail
+          if [ -f .formatter.exs ]; then
+            mix format --check-formatted
+          else
+            echo "no .formatter.exs — skipped."
+          fi
+
+      # The SDK the runner ships is not this project's. Both csprojs target
+      # net10.0, and an older SDK cannot even restore a project naming a newer
+      # framework — it fails NETSDK1045, whose advice ("target .NET 8.0 or lower")
+      # AGENTS.md explicitly forbids taking. Without this the opt-in below is not
+      # an opt-in: committing packages/csharp/.editorconfig turns CI red with an
+      # error that reads like a project defect.
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+      - name: dotnet format, where configured
+        working-directory: packages/csharp
+        run: |
+          set -euo pipefail
+          if [ -f .editorconfig ]; then
+            dotnet format --verify-no-changes NebulaToken.sln
+          else
+            echo "no packages/csharp/.editorconfig — skipped."
+            echo "The repository-root .editorconfig sets indentation only; opting"
+            echo "in to dotnet format means committing a C#-specific one here."
+          fi
+
+  # -------------------------------------------------------------- languages
+
+  typescript:
+    name: TypeScript (node ${{ matrix.node }})
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.config.outputs.node) }}
+    defaults:
+      run:
+        working-directory: packages/typescript
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: packages/typescript/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Type-check the example store template
+        # The package tsconfig deliberately compiles only src/. The example in
+        # packages/typescript/examples imports the source directly, so it needs
+        # allowImportingTsExtensions, which in turn requires noEmit. This config
+        # is a CI artefact and is never committed.
+        run: |
+          set -euo pipefail
+          cat > tsconfig.ci-examples.json <<'JSON'
+          {
+            "extends": "./tsconfig.json",
+            "compilerOptions": {
+              "noEmit": true,
+              "allowImportingTsExtensions": true,
+              "rootDir": "."
+            },
+            "include": ["src", "examples"]
+          }
+          JSON
+          npx tsc -p tsconfig.ci-examples.json
+
+  python:
+    name: Python ${{ matrix.python }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ${{ fromJSON(needs.config.outputs.python) }}
+    defaults:
+      run:
+        working-directory: packages/python
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      # Install the package rather than relying on the working directory
+      # happening to be importable: a bare `pytest` here used to exit 2 with
+      # ModuleNotFoundError, and a suite that cannot import the package it tests
+      # proves nothing about the artefact users install.
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e .
+      - run: pip install pytest
+      - run: pytest -q
+      - name: The install is importable from outside the source tree
+        # `pip install -e .` is an editable install, so this resolves back to
+        # packages/python/nebula_token. What it proves is that the install
+        # succeeded and the package's public names exist — not that a built
+        # wheel is sound. Proving that needs an install from the registry, and
+        # that check lives after publication (RELEASING.md step 6).
+        run: |
+          cd "$RUNNER_TEMP"
+          python -c "import nebula_token; print('nebula_token spec', nebula_token.SPEC_VERSION, 'from', nebula_token.__file__)"
+      - name: Type-check, where configured
+        run: |
+          set -euo pipefail
+          if grep -q '^\[tool\.mypy\]' pyproject.toml; then
+            pip install mypy
+            mypy
+          else
+            echo "no [tool.mypy] in pyproject.toml — skipped."
+          fi
+      - name: Byte-compile the example store template
+        # packages/python/examples
+        run: python -m compileall -q examples
+
+  go:
+    name: Go ${{ matrix.go }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ${{ fromJSON(needs.config.outputs.go) }}
+    defaults:
+      run:
+        working-directory: packages/go
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: packages/go/go.mod
+      # `go build ./...` also compiles packages/go/examples/sqlstore, which
+      # nothing used to compile.
+      - run: go build ./...
+      - run: go vet ./...
+      # -race is not optional. The in-memory store required by [N-21] must be
+      # safe under the runtime's normal request concurrency, and a data race in
+      # it does not fail a test — it kills the process, in production.
+      - run: go test -race -count=1 ./...
+
+  rust:
+    name: Rust ${{ matrix.rust }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ${{ fromJSON(needs.config.outputs.rust) }}
+    defaults:
+      run:
+        working-directory: packages/rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, resolved 2026-07-25
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/rust/target
+          key: cargo-${{ runner.os }}-${{ matrix.rust }}-${{ hashFiles('packages/rust/Cargo.toml') }}
+          restore-keys: cargo-${{ runner.os }}-${{ matrix.rust }}-
+      - run: cargo test
+      # examples/*.rs is a cargo example by convention; this compiles the store
+      # template in packages/rust/examples.
+      - run: cargo build --examples
+      - name: cargo clippy
+        # Clippy gains lints in every release, so a new stable lint would fail
+        # the MSRV leg for a reason unrelated to the MSRV.
+        if: matrix.rust == 'stable'
+        run: cargo clippy --all-targets -- -D warnings
+
+  java:
+    name: Java ${{ matrix.java }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ${{ fromJSON(needs.config.outputs.java) }}
+    defaults:
+      run:
+        working-directory: packages/java
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - run: mvn -B -ntp verify
+      - name: Compile the example store template
+        # packages/java/examples sits outside src/main/java on purpose — it must
+        # not ship in the jar — so Maven never compiles it. javac against the
+        # freshly built classes does.
+        run: |
+          set -euo pipefail
+          mkdir -p target/examples-classes
+          javac -Xlint:all -cp target/classes -d target/examples-classes examples/*.java
+
+  php:
+    name: PHP ${{ matrix.php }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ${{ fromJSON(needs.config.outputs.php) }}
+    # No working-directory: the composer project root IS the repository root.
+    # Packagist reads composer.json from a repository root only, so the PHP
+    # package's single manifest is /composer.json — it maps NebulaToken\ onto
+    # packages/php/src — and vendor/ therefore lands at the root as well. There
+    # is deliberately no second manifest under packages/php: two composer.json
+    # files declaring nebula-token/nebula-token would let this job pass against
+    # a manifest that is not the one Packagist publishes.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer
+      - run: composer install --no-progress --no-interaction --prefer-dist
+      # packages/php/phpunit.xml stays with the PHP sources; PHPUnit resolves the
+      # paths inside it relative to the file itself, so src/ and tests/ still
+      # mean the package's own directories.
+      - run: vendor/bin/phpunit -c packages/php/phpunit.xml
+      - name: Load the example store template
+        # Requiring the file is the whole check: PHP raises a fatal error at
+        # class-declaration time when a class does not satisfy the interface it
+        # claims, which is exactly how an example that has fallen behind the
+        # store contract announces itself. packages/php/examples
+        run: |
+          # shellcheck disable=SC2016 # $f is PHP's variable; the shell must not touch it
+          php -d error_reporting=E_ALL -r '
+            require "vendor/autoload.php";
+            foreach (glob("packages/php/examples/*.php") as $f) { require $f; echo "loaded $f\n"; }
+          '
+
+  csharp:
+    name: .NET ${{ matrix.framework }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.config.outputs.dotnet) }}
+    defaults:
+      run:
+        working-directory: packages/csharp
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          # One SDK per leg, read from the matrix. This was two SDKs in every leg
+          # while the projects multi-targeted net8.0 and net10.0 — an older SDK
+          # cannot even restore a project that names a newer framework. Should a
+          # second framework ever be added back, add its SDK to the matrix entry
+          # rather than hardcoding a list here.
+          dotnet-version: ${{ matrix.sdk }}
+      # No `-f`. Both csproj files declare exactly one <TargetFramework>, so the
+      # flag selects nothing — but on a SOLUTION build it is passed down as a
+      # global property, which splits NebulaToken.csproj into two project
+      # instances: the one the solution builds, and the one the test project
+      # references. Both run GenerateDepsFile against the same
+      # bin/Release/net10.0/NebulaToken.deps.json, and the race surfaces as
+      #
+      #   MSB4018: The "GenerateDepsFile" task failed unexpectedly.
+      #   System.IO.IOException: The process cannot access the file ...
+      #
+      # It is a race, so it passes locally and in Docker and fails on a runner
+      # with four cores. `-f` was the last survivor of the net8.0/net10.0
+      # multi-targeting AGENTS.md describes as gone; it is gone now.
+      - run: dotnet restore
+      - run: dotnet build -c Release --no-restore
+      - run: dotnet test -c Release --no-build
+      - name: Compile the example store template
+        # packages/csharp/examples belongs to no csproj — it would otherwise
+        # ship inside the NuGet package — so a throwaway project compiles it.
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/examples"
+          proj="$RUNNER_TEMP/examples/Examples.csproj"
+          cat > "$proj" <<XML
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>${{ matrix.framework }}</TargetFramework>
+              <Nullable>enable</Nullable>
+              <ImplicitUsings>enable</ImplicitUsings>
+              <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+              <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+            </PropertyGroup>
+            <ItemGroup>
+              <Compile Include="$GITHUB_WORKSPACE/packages/csharp/examples/*.cs" />
+              <ProjectReference Include="$GITHUB_WORKSPACE/packages/csharp/src/NebulaToken/NebulaToken.csproj" />
+            </ItemGroup>
+          </Project>
+          XML
+          dotnet build "$proj" -c Release
+
+  dart:
+    name: Dart ${{ matrix.dart }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        dart: ${{ fromJSON(needs.config.outputs.dart) }}
+    defaults:
+      run:
+        working-directory: packages/dart
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+        with:
+          sdk: ${{ matrix.dart }}
+      - run: dart pub get
+      # Analyses the whole package, packages/dart/example included — which is
+      # what compiles the store template.
+      - run: dart analyze --fatal-infos
+      - run: dart test
+
+  ruby:
+    name: Ruby ${{ matrix.ruby }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ${{ fromJSON(needs.config.outputs.ruby) }}
+    defaults:
+      run:
+        working-directory: packages/ruby
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      - name: Run every test file
+        # Globbed rather than listed: a test file added but not wired up is a
+        # test file that never runs.
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(test/*_test.rb)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error title=ruby::no test/*_test.rb files found"
+            exit 1
+          fi
+          for f in "${files[@]}"; do echo "--- $f"; ruby -Ilib "$f"; done
+      - name: Syntax-check the example store template
+        # The pg gem is not installed, so the file cannot be loaded; a syntax
+        # check is the honest ceiling. packages/ruby/examples
+        run: |
+          set -euo pipefail
+          for f in examples/*.rb; do ruby -c "$f"; done
+
+  elixir:
+    name: Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    needs: config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.config.outputs.elixir) }}
+    defaults:
+      run:
+        working-directory: packages/elixir
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            packages/elixir/deps
+            packages/elixir/_build
+          key: mix-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('packages/elixir/mix.exs') }}
+          restore-keys: mix-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-
+      - run: mix deps.get
+      - run: mix test
+      - name: Compile the example store template
+        # packages/elixir/examples is outside lib/, so mix never compiles it.
+        # Postgrex is not a dependency, so this deliberately does not pass
+        # --warnings-as-errors: the undefined-module warning is expected, and is
+        # the point of a driver-agnostic template.
+        run: |
+          set -euo pipefail
+          mix compile
+          mkdir -p _build/examples
+          elixirc --ignore-module-conflict -o _build/examples \
+            -pa _build/dev/lib/nebula_token/ebin examples/*.ex
+
+  # ------------------------------------------------------------------ other
+
+  # No website job here. The site that will serve nebulatoken.dev is not part
+  # of this repository's build: `website/` is gitignored and untracked, and it
+  # exists in NO other repository — see .gitignore and AGENTS.md, both of which
+  # carry the same warning, because a comment claiming a copy exists is how the
+  # only copy gets deleted. If it ever does get a repository of its own it needs
+  # a job there — its Token Inspector is a token parser and its Rotation
+  # Simulator implements the state machine, so both must run against
+  # spec/test-vectors.json and assert that a theft transcript ends in
+  # REUSE_DETECTED. A public page contradicting the specification is a defect
+  # wherever it is hosted.
+
+  paper:
+    name: Paper
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      # Pinned by digest, for the reason the actions are pinned by SHA.
+      image: texlive/texlive@sha256:1a1b8588cd73ac33fe1d7722c4065b3e6eaa3f3a20fb54d2934e42310264d134 # latest, resolved 2026-07-25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: latexmk
+        working-directory: docs/paper
+        run: latexmk -pdf -interaction=nonstopmode -halt-on-error -file-line-error nebula.tex
+      - name: The paper must not have silently truncated
+        # A truncated source still "builds" — it just produces a shorter paper.
+        # A page floor and a scan for unresolved references are what make that
+        # loud instead of silent.
+        working-directory: docs/paper
+        run: |
+          set -euo pipefail
+          pages=$(sed -n 's/.*Output written on .*(\([0-9][0-9]*\) pages.*/\1/p' nebula.log | tail -1)
+          echo "pages: ${pages:-unknown}"
+          if [ -z "${pages:-}" ] || [ "$pages" -lt 10 ]; then
+            echo "::error title=paper::built ${pages:-0} pages; the paper is at least 10. Truncated source?"
+            exit 1
+          fi
+          if grep -E "(Reference|Citation) .* undefined" nebula.log; then
+            echo "::error title=paper::unresolved references"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper
+          path: docs/paper/nebula.pdf
+          if-no-files-found: error
+
+  links:
+    name: External links
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: lychee
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          # Relative links are gated offline by scripts/check-links.mjs in the
+          # `gates` job; this job is only about the outside world. Exemptions
+          # and their reasons live in .lycheeignore.
+          args: >-
+            --no-progress
+            --max-retries 3
+            --retry-wait-time 10
+            --timeout 30
+            --accept 200,206,429
+            --exclude-path node_modules
+            --exclude-path vendor
+            "**/*.md"
+          fail: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The harness in docker/ is the supported way for anyone outside this runner to
+  # reproduce the conformance claim — one command, no ten toolchains
+  # (docker/README.md). That makes it load-bearing, so it cannot be allowed to
+  # rot; it must also not double what CI costs. Hence three different assertions,
+  # chosen by why this job is running:
+  #
+  #   every push, PR and merge_group — `--check` alone, seconds: the compose file
+  #     parses, every image is still pinned by digest, every image is still the
+  #     floor .github/runtime-matrix.json declares, and every command in it still
+  #     appears in a step of this workflow. That last one is the point: a harness
+  #     quietly running commands CI abandoned would certify the wrong thing while
+  #     staying green. Because this runs on every push, this job is in ci-ok's
+  #     needs list below.
+  #
+  #   a PULL REQUEST touching docker/ or scripts/docker-test.mjs — the above, plus
+  #     two services actually executed. Scoped to pull_request because that is the
+  #     only event where a base commit to diff against is defined, and because
+  #     every change reaches main through one. `go` and `ruby` are the
+  #     representative subset:
+  #     one compiled, one interpreted, both among the four languages nobody
+  #     working on this repository could run locally, and both with small images.
+  #     Two services exercise every piece of plumbing the ten share — the
+  #     read-only mount, the staging copy, vector resolution by walking up to
+  #     spec/, the exit-code path — which is exactly what a change here breaks.
+  #
+  #   the weekly schedule, and workflow_dispatch — all ten, in Docker. This is the
+  #     one thing the native jobs above cannot show: that the claim holds in a
+  #     clean room, in the images a third party would actually use, at the
+  #     declared floors rather than at whatever the runner has installed.
+  #
+  # Running all ten in Docker on every push was considered and rejected: it would
+  # execute every conformance suite twice per push to learn one bit — that Docker
+  # still works — which the schedule already reports.
+  docker-harness:
+    name: Docker harness
+    runs-on: ubuntu-24.04
+    # The full pass pulls ten images and installs each ecosystem's test
+    # dependencies from cold; the ubuntu runner has the Docker daemon and the
+    # Compose plugin preinstalled, so nothing else is provisioned here.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # HEAD^1 of a pull_request merge commit is the base branch tip, which is
+          # what makes the diff below work without cloning the whole history.
+          fetch-depth: 2
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: The harness still runs what this workflow runs
+        # No daemon needed for this step, which is also why a contributor can run
+        # it before starting Docker.
+        run: node scripts/docker-test.mjs --check
+      - name: Decide what to execute
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          scope=none
+          case "$EVENT" in
+            schedule | workflow_dispatch)
+              scope=all
+              ;;
+            pull_request)
+              if changed=$(git diff --name-only HEAD^1 HEAD 2>/dev/null); then
+                if printf '%s\n' "$changed" | grep -Eq '^(docker/|scripts/docker-test\.mjs$)'; then
+                  scope=subset
+                fi
+              else
+                echo "::notice title=docker-harness::could not diff against the base commit; running the subset"
+                scope=subset
+              fi
+              ;;
+          esac
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "scope: $scope"
+      - name: Representative subset — go and ruby, in Docker
+        if: steps.scope.outputs.scope == 'subset'
+        run: node scripts/docker-test.mjs go ruby
+      - name: The whole conformance matrix, in Docker
+        if: steps.scope.outputs.scope == 'all'
+        run: node scripts/docker-test.mjs
+
+  # ------------------------------------------------------------ the verdict
+  #
+  # One job to require in branch protection, and the single output release.yml
+  # trusts. Matrix legs cannot be listed individually as required checks without
+  # pinning the matrix in a second place, so they are aggregated here.
+
+  ci-ok:
+    name: CI
+    if: always()
+    needs:
+      - config
+      - gates
+      - format
+      - typescript
+      - python
+      - go
+      - rust
+      - java
+      - php
+      - csharp
+      - dart
+      - ruby
+      - elixir
+      - paper
+      - links
+      # Listed because its `--check` step runs on every push: the harness that
+      # third parties are told to trust must never disagree with this workflow.
+      - docker-harness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      conformance: ${{ steps.verdict.outputs.conformance }}
+    steps:
+      - name: Every job must have succeeded
+        id: verdict
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"' | sort
+          failed=$(echo "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')
+          if [ -n "$failed" ]; then
+            echo "conformance=failed" >> "$GITHUB_OUTPUT"
+            echo "::error title=CI::not green: $failed"
+            exit 1
+          fi
+          echo "conformance=ok" >> "$GITHUB_OUTPUT"
+          echo "every job green; the conformance suite ran in this invocation"

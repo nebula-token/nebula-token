@@ -1,0 +1,11 @@
+# What `dart pub publish` leaves out of the archive.
+#
+# Conformance is verified from a repository checkout, never from the published
+# package (RELEASING.md), so the suite that reads ../../spec/ has no business in
+# a pub.dev archive — its vectors are not there and it could not run.
+#
+# A .pubignore replaces .gitignore for this directory, so the locally generated
+# files a .gitignore would have caught are named here too.
+test/
+.dart_tool/
+pubspec.lock

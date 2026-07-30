@@ -1,0 +1,922 @@
+# NEBULA release: ten artefacts, ten registries, one behaviour.
+#
+# Triggered by a signed `vX.Y.Z` tag. The order of the publish jobs is the order
+# in RELEASING.md, and it is a chain rather than a fan-out on purpose: each job
+# `needs` the previous one, so the release stops at the first failure instead of
+# leaving five registries updated and five behind.
+#
+# The rule that matters most is RELEASING.md's "never publish a package whose
+# conformance suite did not run in that same CI invocation". It is enforced
+# structurally: this workflow *calls* ci.yml, and every publish job descends
+# from `preflight`, which refuses to proceed unless that call reported
+# conformance == ok. There is no path to a publish step that skips it, and no
+# way to hand-wave it with a green tick from an older run on the same commit.
+#
+# Every publish job names a GitHub environment. Configure each with required
+# reviewers and with only its own secret: a compromised npm step must not be
+# able to read the Maven signing key.
+#
+#   Environment        Secret(s)                       Auth
+#   release-npm        (none)                          OIDC trusted publishing
+#   release-pypi       (none)                          OIDC trusted publishing
+#   release-crates     CARGO_REGISTRY_TOKEN            token
+#   release-maven      MAVEN_GPG_PRIVATE_KEY,          Central Portal + GPG
+#                      MAVEN_GPG_PASSPHRASE,
+#                      CENTRAL_TOKEN_USERNAME,
+#                      CENTRAL_TOKEN_PASSWORD
+#   release-nuget      NUGET_API_KEY                   token
+#   release-rubygems   (none)                          OIDC trusted publishing
+#   release-hex        HEX_API_KEY                     token
+#   release-pub        (none)                          OIDC automated publishing
+#   release-packagist  PACKAGIST_USERNAME,             webhook
+#                      PACKAGIST_TOKEN
+#   release-go         (none)                          GITHUB_TOKEN, contents:write
+#
+# One environment, one job. A secret stored on an environment is readable only
+# from a job that names that environment, so splitting the credentials across
+# environments and then reading two of them from one job silently yields empty
+# strings.
+#
+# EVERYTHING PUBLISHES FROM THIS REPOSITORY. There are no mirror repositories and
+# no PAT with write access to one. The two ecosystems that cannot consume a
+# monorepo subdirectory are handled in place instead:
+#
+#   * PHP — the manifest is the ROOT composer.json, because Packagist reads
+#     composer.json from a repository root only. `.gitattributes` export-ignore
+#     rules trim the dist archive (which Composer builds with `git archive`) down
+#     to packages/php, LICENSE, README.md and SPECIFICATION.md, so a PHP consumer
+#     never downloads the other nine languages. Publishing is one webhook call
+#     against this repository.
+#   * Go — the module is github.com/nebula-token/nebula-token/packages/go, a
+#     submodule. Go resolves a submodule's versions ONLY from tags prefixed with
+#     the module directory, so the release pushes `packages/go/vX.Y.Z` alongside
+#     the `vX.Y.Z` tag that triggered it. That tag push is what publishes the Go
+#     module, which is why it lives here, after preflight, rather than in a
+#     maintainer's `git push`: a hand-pushed prefixed tag would publish Go before
+#     the conformance suite had run.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel a release half-way through: a cancelled run is the partial
+  # publication this whole file exists to prevent.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ------------------------------------------------------------ conformance
+
+  ci:
+    name: Conformance
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  preflight:
+    name: Preflight
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: The conformance suite must have run, here, and passed
+        env:
+          CONFORMANCE: ${{ needs.ci.outputs.conformance }}
+        run: |
+          set -euo pipefail
+          echo "conformance: ${CONFORMANCE:-<empty>}"
+          if [ "${CONFORMANCE:-}" != "ok" ]; then
+            echo "::error title=preflight::the conformance suite did not report ok in this invocation; refusing to publish"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: The tag must be annotated
+        # RELEASING.md cuts releases with `git tag -s`. A lightweight tag means
+        # somebody published from a workstation habit rather than the procedure.
+        run: |
+          set -euo pipefail
+          kind=$(git cat-file -t "$GITHUB_REF_NAME")
+          echo "$GITHUB_REF_NAME is a $kind object"
+          if [ "$kind" != "tag" ]; then
+            echo "::error title=preflight::$GITHUB_REF_NAME is a lightweight tag; releases are cut with 'git tag -s'"
+            exit 1
+          fi
+
+      - name: Read the version from the tag
+        id: tag
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "releasing $version"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      # `gates` in ci.yml runs `npm ci` first; this job does not, and works only
+      # because version.mjs, check-skills.mjs and check-marketplace.mjs happen to
+      # import nothing outside node:*. That is not true of every script in
+      # scripts/ — validate-vectors.mjs needs ajv — and nothing asserts it. One
+      # schema check added to check-skills.mjs would fail the release here, after
+      # ten registries have published.
+      - run: npm ci
+        working-directory: scripts
+      - name: Every manifest must already carry this version
+        # The bump is a reviewed commit (RELEASING.md step 3), never something
+        # the release workflow performs on the fly.
+        run: node scripts/version.mjs check --expect "${{ steps.tag.outputs.version }}"
+
+      - name: Maven Central's preconditions must already be in the pom
+        # `mvn -P release deploy` is job 4 of 10. Maven treats an unknown -P
+        # profile as a WARNING, so a pom without the profile does not fail early
+        # — it fails inside `deploy`, after npm, PyPI and crates.io have
+        # published versions that can never be republished. Central additionally
+        # rejects any bundle lacking sources, javadoc and detached signatures.
+        # Asserting it here turns a partial release into a blocked one.
+        run: |
+          set -euo pipefail
+          pom=packages/java/pom.xml
+          missing=()
+          grep -q "<id>release</id>"                  "$pom" || missing+=("a <profile> with <id>release</id>")
+          grep -q "central-publishing-maven-plugin"   "$pom" || missing+=("central-publishing-maven-plugin")
+          grep -q "maven-gpg-plugin"                  "$pom" || missing+=("maven-gpg-plugin (Central requires detached signatures)")
+          grep -q "maven-source-plugin"               "$pom" || missing+=("maven-source-plugin (Central requires a sources jar)")
+          grep -q "maven-javadoc-plugin"              "$pom" || missing+=("maven-javadoc-plugin (Central requires a javadoc jar)")
+          grep -q "<groupId>dev.nebulatoken</groupId>" "$pom" || missing+=("groupId dev.nebulatoken — Sonatype binds the namespace to the reversed domain permanently")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error title=preflight::$pom cannot be deployed to Maven Central; refusing to publish anything"
+            for m in "${missing[@]}"; do echo "  missing: $m"; done
+            exit 1
+          fi
+          echo "$pom declares the release profile and every artefact Central requires"
+
+      - name: The changelog must describe this version
+        run: |
+          set -euo pipefail
+          version="${{ steps.tag.outputs.version }}"
+          section=$(awk -v v="$version" '
+            /^## \[/ { if (found) exit; if (index($0, "[" v "]")) { found = 1; next } }
+            found
+          ' CHANGELOG.md)
+          if [ -z "$(echo "$section" | tr -d '[:space:]')" ]; then
+            echo "::error title=preflight::CHANGELOG.md has no entry for $version"
+            exit 1
+          fi
+          { echo "$section"; } > "$RUNNER_TEMP/release-notes.md"
+          echo "--- release notes ---"
+          cat "$RUNNER_TEMP/release-notes.md"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------- SBOM
+
+  sbom:
+    name: SBOM
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Make the output directory
+        # sbom-action writes `output-file` with a plain file write; it does not
+        # create the parent directory, and an ENOENT here fails the job that
+        # github-release depends on.
+        run: mkdir -p "$RUNNER_TEMP/sbom"
+      - name: SPDX
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: nebula-token-${{ needs.preflight.outputs.version }}.spdx.json
+          output-file: ${{ runner.temp }}/sbom/nebula-token.spdx.json
+      - name: CycloneDX
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: nebula-token-${{ needs.preflight.outputs.version }}.cdx.json
+          output-file: ${{ runner.temp }}/sbom/nebula-token.cdx.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: ${{ runner.temp }}/sbom/*.json
+          if-no-files-found: error
+
+  # ----------------------------------------------------------- agent skills
+
+  skills:
+    name: Agent skills archive
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      # Same reason as preflight: these two gates import only node:* today, and
+      # nothing asserts that they always will.
+      - run: npm ci
+        working-directory: scripts
+      - name: The skills must be shipped, complete and correctly named
+        # The same gate the `gates` job runs. Re-run here because this job is
+        # what publishes the archive: it is what proves the ten directories
+        # exist at their canonical paths and that each frontmatter `name`
+        # matches the directory a user will install it as.
+        run: node scripts/check-skills.mjs
+      - name: The marketplace manifest still names the same ten
+        # The archive built below is the offline fallback for the two install
+        # routes that manifest defines. Publishing a release whose primary route
+        # is broken, with a zip that quietly works, is the failure this prevents.
+        run: node scripts/check-marketplace.mjs
+      - name: Build the archive
+        # The skills are canonical inside their packages, already in installable
+        # form: packages/<lang>/skills/nebula-token-<lang>/SKILL.md. Staged into
+        # one flat directory and zipped from inside it, so the archive entries
+        # are `nebula-token-<lang>/SKILL.md` with no leading path to strip —
+        # `unzip -d ~/.claude/skills/` yields exactly the directories a client
+        # expects, which is the line skills/README.md documents.
+        #
+        # Only the skill directories are staged, never a whole package: an agent
+        # that loaded a package README as a skill would be reading install
+        # instructions instead of integration guidance.
+        run: |
+          set -euo pipefail
+          staging="$RUNNER_TEMP/skills-staging"
+          rm -rf "$staging"
+          mkdir -p "$staging" "$RUNNER_TEMP/skills"
+          staged=0
+          for dir in packages/*/skills/nebula-token-*/; do
+            cp -R "$dir" "$staging/"
+            staged=$((staged + 1))
+          done
+          if [ "$staged" -ne 10 ]; then
+            echo "::error title=skills::expected 10 skill directories under packages/*/skills/, found $staged"
+            exit 1
+          fi
+          (cd "$staging" && zip -r -q "$RUNNER_TEMP/skills/nebula-token-skills.zip" nebula-token-*/)
+          unzip -l "$RUNNER_TEMP/skills/nebula-token-skills.zip"
+          count=$(unzip -Z1 "$RUNNER_TEMP/skills/nebula-token-skills.zip" '*/SKILL.md' | wc -l)
+          if [ "$count" -ne 10 ]; then
+            echo "::error title=skills::expected 10 SKILL.md entries in the archive, found $count"
+            exit 1
+          fi
+          echo "archive carries $count skills"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: skills
+          path: ${{ runner.temp }}/skills/nebula-token-skills.zip
+          if-no-files-found: error
+
+  # -------------------------------------------------------- 1. npm  (OIDC)
+
+  npm:
+    name: "1. npm"
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release-npm
+      url: https://www.npmjs.com/package/nebula-token
+    permissions:
+      contents: read
+      id-token: write # provenance attestation and trusted publishing
+    defaults:
+      run:
+        working-directory: packages/typescript
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: packages/typescript/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+      # Node 22 bundles npm 10 for the whole of its lifetime, and npm's OIDC
+      # trusted publishing landed in **npm CLI 11.5.1**. Without this step the
+      # publish below has no credential at all: setup-node's registry-url writes
+      # an `_authToken=${NODE_AUTH_TOKEN}` line, NODE_AUTH_TOKEN is deliberately
+      # never set, and npm 10 does not know how to exchange the workflow's OIDC
+      # identity for one. The job dies on 401 — indistinguishable, from the log,
+      # from a trusted publisher configured wrongly on the registry side.
+      #
+      # The floor stays at 22 because that is what packages/typescript/package.json
+      # declares and what the tarball must be built against; only the CLI moves.
+      - name: npm >= 11.5.1, for OIDC trusted publishing
+        run: |
+          npm install -g "npm@^11.5.1"
+          npm -v
+
+      # The npm CLI version above is necessary and NOT sufficient, which 1.0.0
+      # found the expensive way: the first tag failed here, at job 1 of 10, with
+      # `E404 PUT https://registry.npmjs.org/nebula-token` on a package that
+      # demonstrably exists.
+      #
+      # setup-node's `registry-url` writes
+      # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` into
+      # $RUNNER_TEMP/.npmrc and points NPM_CONFIG_USERCONFIG at it. Leaving
+      # NODE_AUTH_TOKEN unset is correct for trusted publishing, but it does not
+      # yield "no credential": the placeholder expands to an EMPTY one, npm reads
+      # the file, concludes auth is already configured, never starts the OIDC
+      # exchange, and PUTs with an empty bearer. The registry answers 404 instead
+      # of 403 because it will not confirm that a package you cannot write to
+      # exists — so the log accuses the trusted publisher of being misconfigured
+      # when the credential never left the runner (actions/setup-node#1551).
+      #
+      # Deleting the line is the documented workaround. The OIDC assertion after
+      # it is the part that makes the next failure legible instead of opaque:
+      # ACTIONS_ID_TOKEN_REQUEST_URL exists only when `id-token: write` is in
+      # force, so if it is missing this stops here, named, rather than 40 lines
+      # later as someone else's 404.
+      - name: Clear the empty _authToken so npm reaches the OIDC exchange
+        run: |
+          set -euo pipefail
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          if [ -f "$npmrc" ]; then
+            sed -i '/_authToken/d' "$npmrc"
+            echo "--- $npmrc after ---"
+            cat "$npmrc"
+          else
+            echo "no npmrc at $npmrc"
+          fi
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error title=npm::no OIDC context: ACTIONS_ID_TOKEN_REQUEST_URL is unset, so 'id-token: write' is not in force for this job. Refusing to publish."
+            exit 1
+          fi
+          echo "OIDC context present"
+
+      - name: Publish with provenance
+        # No NODE_AUTH_TOKEN: the package is configured for trusted publishing,
+        # so the OIDC identity of this workflow is the credential — see the npm
+        # upgrade step above, without which that sentence is not true.
+        # --provenance is what lets a consumer verify that this tarball came from
+        # this commit in this repository.
+        #
+        # --tag is why this is not a one-liner. npm has no notion of a
+        # prerelease channel: `npm publish` moves the `latest` dist-tag
+        # unconditionally, so publishing 1.0.0-rc.1 without a tag makes
+        # `npm i nebula-token` install the release candidate. VERSIONING.md §4
+        # promises the opposite ("never the default install"), and npm is the
+        # only one of the ten that needs to be told — PyPI, crates.io, NuGet,
+        # RubyGems, Hex and pub.dev all exclude prereleases from default
+        # resolution on their own. A SemVer prerelease is exactly a version
+        # with a `-`, which is also what release.yml's second tag pattern
+        # matches and what `github-release` already reads to set `prerelease`.
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          case "$VERSION" in
+            *-*) tag=next ;;
+            *)   tag=latest ;;
+          esac
+          echo "publishing $VERSION to dist-tag $tag"
+          npm publish --provenance --access public --tag "$tag"
+
+  # ------------------------------------------------- 2. PyPI  (Trusted Pub.)
+
+  pypi:
+    name: "2. PyPI"
+    needs: [preflight, npm]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release-pypi
+      url: https://pypi.org/project/nebula-token/
+    permissions:
+      contents: read
+      id-token: write # Trusted Publishing; no long-lived token exists
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade build
+      - run: python -m build
+        working-directory: packages/python
+      - uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+        with:
+          packages-dir: packages/python/dist
+          print-hash: true
+
+  # ------------------------------------------------------ 3. crates.io
+
+  crates:
+    name: "3. crates.io"
+    needs: [preflight, pypi]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: release-crates
+      url: https://crates.io/crates/nebula-token
+    defaults:
+      run:
+        working-directory: packages/rust
+    steps:
+      # An empty secret is not an error to any of these tools: it is a bad
+      # credential, and they fail on the network call. By then the registries
+      # before this one in the chain have published versions that can never be
+      # republished. `preflight` cannot check this — it names no environment, and
+      # an environment secret is unreadable from a job that does not name that
+      # environment — so the cheapest place is the first step of the job that
+      # holds it. Two lines, and the difference between a blocked release and a
+      # release stranded at registry N of 10.
+      - name: The credential for this registry must exist
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${CARGO_REGISTRY_TOKEN:-}" ] || missing+=("CARGO_REGISTRY_TOKEN")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error title=crates::empty secret(s) on environment release-crates; refusing to publish"
+            for m in "${missing[@]}"; do echo "  missing: $m"; done
+            exit 1
+          fi
+          echo "credential present"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch, resolved 2026-07-25
+        with:
+          toolchain: stable
+      # No --locked. Cargo.lock is deliberately not committed for a library
+      # (.gitignore), and --locked fails outright when the lock file is absent
+      # rather than resolving one — which would abort the release at registry 3
+      # of 10, with npm and PyPI already published and immutable. The crate does
+      # have six dependencies (hmac, sha2, base64, hex, rand, subtle — Rust
+      # ships no cryptographic primitives), so a lock file would have something
+      # to pin; a library still publishes unlocked, because the consumer's
+      # resolver, not ours, decides the versions they build against.
+      - run: cargo publish --token "$CARGO_REGISTRY_TOKEN"
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # --------------------------------------------- 4. Maven Central  (+ GPG)
+
+  maven:
+    name: "4. Maven Central"
+    needs: [preflight, crates]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: release-maven
+      url: https://central.sonatype.com/artifact/dev.nebulatoken/nebula-token
+    defaults:
+      run:
+        working-directory: packages/java
+    steps:
+      # An empty secret is not an error to any of these tools: it is a bad
+      # credential, and they fail on the network call. By then the registries
+      # before this one in the chain have published versions that can never be
+      # republished. `preflight` cannot check this — it names no environment, and
+      # an environment secret is unreadable from a job that does not name that
+      # environment — so the cheapest place is the first step of the job that
+      # holds it. Two lines, and the difference between a blocked release and a
+      # release stranded at registry N of 10.
+      - name: The credential for this registry must exist
+        env:
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${MAVEN_GPG_PRIVATE_KEY:-}" ] || missing+=("MAVEN_GPG_PRIVATE_KEY")
+          [ -n "${MAVEN_GPG_PASSPHRASE:-}" ] || missing+=("MAVEN_GPG_PASSPHRASE")
+          [ -n "${CENTRAL_TOKEN_USERNAME:-}" ] || missing+=("CENTRAL_TOKEN_USERNAME")
+          [ -n "${CENTRAL_TOKEN_PASSWORD:-}" ] || missing+=("CENTRAL_TOKEN_PASSWORD")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error title=maven::empty secret(s) on environment release-maven; refusing to publish"
+            for m in "${missing[@]}"; do echo "  missing: $m"; done
+            exit 1
+          fi
+          echo "credential present"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Import the signing key
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
+        with:
+          gpg_private_key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          server-id: central
+          server-username: CENTRAL_TOKEN_USERNAME
+          server-password: CENTRAL_TOKEN_PASSWORD
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+      - name: Deploy
+        # Central rejects a bundle without sources, javadoc and detached
+        # signatures, so the `release` profile in pom.xml must attach
+        # maven-source-plugin, maven-javadoc-plugin, maven-gpg-plugin and
+        # central-publishing-maven-plugin. Tests already ran in the ci job.
+        run: mvn -B -ntp -P release -DskipTests deploy
+        env:
+          CENTRAL_TOKEN_USERNAME: ${{ secrets.CENTRAL_TOKEN_USERNAME }}
+          CENTRAL_TOKEN_PASSWORD: ${{ secrets.CENTRAL_TOKEN_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
+  # ----------------------------------------------------------- 5. NuGet
+
+  nuget:
+    name: "5. NuGet"
+    needs: [preflight, maven]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release-nuget
+      url: https://www.nuget.org/packages/NebulaToken
+    defaults:
+      run:
+        working-directory: packages/csharp
+    steps:
+      # An empty secret is not an error to any of these tools: it is a bad
+      # credential, and they fail on the network call. By then the registries
+      # before this one in the chain have published versions that can never be
+      # republished. `preflight` cannot check this — it names no environment, and
+      # an environment secret is unreadable from a job that does not name that
+      # environment — so the cheapest place is the first step of the job that
+      # holds it. Two lines, and the difference between a blocked release and a
+      # release stranded at registry N of 10.
+      - name: The credential for this registry must exist
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${NUGET_API_KEY:-}" ] || missing+=("NUGET_API_KEY")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error title=nuget::empty secret(s) on environment release-nuget; refusing to publish"
+            for m in "${missing[@]}"; do echo "  missing: $m"; done
+            exit 1
+          fi
+          echo "credential present"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          # One SDK, because the project targets one framework. The 8.0.x line
+          # is a leftover from the period when NebulaToken.csproj multi-targeted
+          # net8.0;net10.0; installing an SDK nothing builds against only widens
+          # what the publish job can silently resolve against.
+          dotnet-version: 10.0.x
+      - name: Pack, with the symbols package alongside
+        run: |
+          dotnet pack src/NebulaToken/NebulaToken.csproj -c Release \
+            --include-symbols -p:SymbolPackageFormat=snupkg \
+            -o "$RUNNER_TEMP/nupkg"
+      - name: Push
+        run: |
+          dotnet nuget push "$RUNNER_TEMP/nupkg/*.nupkg" \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+  # -------------------------------------------------- 6. RubyGems  (OIDC)
+
+  rubygems:
+    name: "6. RubyGems"
+    needs: [preflight, nuget]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release-rubygems
+      url: https://rubygems.org/gems/nebula-token
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "3.4"
+      # Deliberately not rubygems/release-gem: that action's only publish step is
+      # `bundle exec rake release`, and packages/ruby has neither a Gemfile nor a
+      # Rakefile — nor should it, since `rake release` also creates and pushes
+      # the git tag this workflow was triggered by. Trusted publishing is the
+      # part worth keeping, so it is configured directly.
+      - name: Configure trusted publishing
+        uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
+      - name: Build and push
+        working-directory: packages/ruby
+        run: |
+          set -euo pipefail
+          gem build nebula-token.gemspec
+          # Globbed rather than composed from the tag: RubyGems normalises a
+          # prerelease version (1.0.0-rc1 becomes 1.0.0.pre.rc1 in the filename),
+          # so a name built from GITHUB_REF_NAME would not exist.
+          gems=(nebula-token-*.gem)
+          if [ ${#gems[@]} -ne 1 ]; then
+            echo "::error title=rubygems::expected exactly one built gem, found ${#gems[@]}: ${gems[*]}"
+            exit 1
+          fi
+          gem push "${gems[0]}"
+
+  # ------------------------------------------------------------ 7. Hex.pm
+
+  hex:
+    name: "7. Hex.pm"
+    needs: [preflight, rubygems]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release-hex
+      url: https://hex.pm/packages/nebula_token
+    defaults:
+      run:
+        working-directory: packages/elixir
+    steps:
+      # An empty secret is not an error to any of these tools: it is a bad
+      # credential, and they fail on the network call. By then the registries
+      # before this one in the chain have published versions that can never be
+      # republished. `preflight` cannot check this — it names no environment, and
+      # an environment secret is unreadable from a job that does not name that
+      # environment — so the cheapest place is the first step of the job that
+      # holds it. Two lines, and the difference between a blocked release and a
+      # release stranded at registry N of 10.
+      - name: The credential for this registry must exist
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "${HEX_API_KEY:-}" ] || missing+=("HEX_API_KEY")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error title=hex::empty secret(s) on environment release-hex; refusing to publish"
+            for m in "${missing[@]}"; do echo "  missing: $m"; done
+            exit 1
+          fi
+          echo "credential present"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+      - run: mix deps.get
+      # `mix hex.publish` publishes the package AND the documentation, and the
+      # documentation half runs `mix docs`, which needs ex_doc. mix.exs has no
+      # ex_doc dependency, so the unqualified form publishes the package and then
+      # fails — and a Hex version cannot be published twice, so the release could
+      # not even be retried. `hex.publish package` is the half that matters.
+      - run: mix hex.publish package --yes
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
+  # ------------------------------------------------- 8. pub.dev  (OIDC)
+
+  pub:
+    name: "8. pub.dev"
+    needs: [preflight, hex]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: release-pub
+      url: https://pub.dev/packages/nebula_token
+    permissions:
+      contents: read
+      id-token: write # pub.dev automated publishing
+    defaults:
+      run:
+        working-directory: packages/dart
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+        with:
+          sdk: stable
+      - run: dart pub get
+      - run: dart pub publish --force
+
+  # ------------------------------------------------------------ 9. Packagist
+
+  packagist:
+    name: "9. Packagist"
+    needs: [preflight, pub]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # One job, one call. There is nothing to mirror: Packagist is registered
+    # against THIS repository, reads the ROOT composer.json, and takes its
+    # version from the tag that triggered this workflow. What keeps the
+    # published artefact PHP-only is `.gitattributes` — Composer builds the dist
+    # with `git archive`, which honours export-ignore.
+    environment:
+      name: release-packagist
+      url: https://packagist.org/packages/nebula-token/nebula-token
+    steps:
+      - name: Nudge Packagist
+        # The webhook usually fires on its own; this makes the release
+        # deterministic rather than eventually-consistent.
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PACKAGIST_USERNAME:-}" ] || [ -z "${PACKAGIST_TOKEN:-}" ]; then
+            echo "::error title=packagist::PACKAGIST_USERNAME/PACKAGIST_TOKEN are not set in the release-packagist environment"
+            exit 1
+          fi
+          curl -sS -f -XPOST \
+            -H "content-type:application/json" \
+            "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_TOKEN}" \
+            -d '{"repository":{"url":"https://github.com/nebula-token/nebula-token"}}'
+
+  # ------------------------------------------------------------------ 10. Go
+
+  go:
+    name: "10. Go"
+    needs: [preflight, packagist]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: release-go
+      url: https://pkg.go.dev/github.com/nebula-token/nebula-token/packages/go
+    permissions:
+      contents: write # push the module's own tag into this repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Tag the Go submodule
+        # packages/go is a Go SUBMODULE of this repository, so the ONLY tags Go
+        # will consider are the ones prefixed with the module's directory:
+        # packages/go/vX.Y.Z. The bare vX.Y.Z tag that triggered this workflow is
+        # invisible to the module proxy. Pushing the prefixed tag IS the Go
+        # publish step — there is no registry upload — which is why it happens
+        # here, downstream of preflight, and not in a maintainer's `git push`.
+        #
+        # No PAT: the tag goes into this repository, so the job's own
+        # GITHUB_TOKEN with contents:write is the whole credential.
+        #
+        # Annotated but not signed. The release's signing key is not on this
+        # runner and must not be; the object this tag names is the same commit as
+        # the signed vX.Y.Z tag, which is where the provenance lives.
+        run: |
+          set -euo pipefail
+          tag="packages/go/${GITHUB_REF_NAME}"
+          # --exit-code returns 2 for "no matching refs" and 128 for a transport
+          # failure. Collapsing both into "safe to tag" removes the guard against
+          # republishing an immutable Go version exactly when the network is the
+          # thing that is wrong.
+          set +e
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+            echo "::error title=go::git ls-remote failed with status $rc; cannot tell whether $tag exists"
+            exit 1
+          fi
+          if [ "$rc" -eq 0 ]; then
+            echo "::error title=go::$tag already exists; a published version is immutable (RELEASING.md: never re-tag)"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "NEBULA Go module ${GITHUB_REF_NAME}" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+          echo "pushed $tag -> $GITHUB_SHA"
+      - name: Warm the module proxy
+        # Fetching once through proxy.golang.org publishes the version to the
+        # index and the checksum database, so `go get` works for the first user
+        # rather than for the second. The proxy path is the module path and the
+        # version is the bare vX.Y.Z — the directory prefix belongs to the tag,
+        # not to the version.
+        run: |
+          set -euo pipefail
+          curl -sS -f "https://proxy.golang.org/github.com/nebula-token/nebula-token/packages/go/@v/${GITHUB_REF_NAME}.info" \
+            || echo "::warning title=go::proxy has not indexed ${GITHUB_REF_NAME} yet; it will on first fetch"
+
+  # -------------------------------------------------------- GitHub release
+
+  github-release:
+    name: GitHub release
+    needs: [preflight, sbom, skills, go]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the release
+      id-token: write # provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/artifacts
+      - name: Collect the attachments
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release"
+          find "$RUNNER_TEMP/artifacts" -type f \
+            \( -name '*.json' -o -name '*.pdf' -o -name '*.zip' \) \
+            -exec cp {} "$RUNNER_TEMP/release/" \;
+          ls -la "$RUNNER_TEMP/release"
+          # The skills archive is a promised download: skills/README.md sends
+          # people to releases/latest/download/nebula-token-skills.zip, so a
+          # release without it is a broken install line, not a missing extra.
+          test -f "$RUNNER_TEMP/release/nebula-token-skills.zip"
+          # The paper is promised as a release attachment (RELEASING.md step 7) and
+          # is uploaded by ci.yml's `paper` job, which this workflow never names —
+          # it arrives only because download-artifact globs the whole run. Rename
+          # or drop that upload and the copy below silently matches no .pdf while
+          # fail_on_unmatched_files stays satisfied by the JSONs and the zip.
+          test -f "$RUNNER_TEMP/release/nebula.pdf"
+      - name: Attest the SBOMs and the paper
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: ${{ runner.temp }}/release/*
+      - name: Publish the release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          body_path: ${{ runner.temp }}/artifacts/release-notes/release-notes.md
+          files: ${{ runner.temp }}/release/*
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ contains(needs.preflight.outputs.version, '-') }}
+
+  # ------------------------------------------------------------ the record
+
+  released:
+    name: Released
+    if: always()
+    needs:
+      # Every job in the run, so the record enumerates it rather than a subset.
+      # `ci` and `sbom` are reachable transitively — preflight needs ci,
+      # github-release needs sbom — but a report of what happened should not
+      # rest on an indirection.
+      - ci
+      - preflight
+      - sbom
+      - skills
+      - npm
+      - pypi
+      - crates
+      - maven
+      - nuget
+      - rubygems
+      - hex
+      - pub
+      - packagist
+      - go
+      - github-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Report which registries received this version
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"' | sort
+
+          # BLOCKED and PARTIALLY PUBLISHED are opposite situations and the
+          # remedies are opposite too, so they must not share a message.
+          #
+          # `skipped != "success"`, and on the likeliest failure path — ci red,
+          # or preflight refusing the tag — every publish job is SKIPPED and
+          # nothing reached a registry. Reporting that as a partial publication,
+          # and telling the maintainer not to re-tag, is advice that is exactly
+          # backwards: deleting and re-pushing the tag is the correct move, and
+          # burning a patch version instead is the cost of getting it wrong.
+          published=$(echo "$NEEDS" | jq -r \
+            '[to_entries[] | select(.key | test("^(npm|pypi|crates|maven|nuget|rubygems|hex|pub|packagist|go)$")) | select(.value.result == "success") | .key]')
+          n_published=$(echo "$published" | jq -r 'length')
+          failed=$(echo "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')
+
+          if [ "$n_published" -eq 0 ]; then
+            echo "::error title=release::BLOCKED before any registry was touched. Did not complete: ${failed}"
+            echo "Nothing was published, so nothing is immutable yet: deleting the tag"
+            echo "and re-pushing it after a fix is safe, and is what you want."
+            exit 1
+          fi
+
+          if [ -n "$failed" ]; then
+            echo "::error title=release::${VERSION} is PARTIALLY PUBLISHED to ${n_published} of 10 registries."
+            echo "$published" | jq -r '"  published: " + join(", ")'
+            echo "Did not complete: ${failed}"
+            echo "A partial release is the failure mode RELEASING.md exists to prevent."
+            echo "Do NOT re-tag: the published versions are immutable. Fix forward and"
+            echo "publish the next patch to all ten."
+            exit 1
+          fi
+          echo "${VERSION} published to all ten registries."

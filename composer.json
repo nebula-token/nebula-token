@@ -1,0 +1,44 @@
+{
+  "name": "nebula-token/nebula-token",
+  "description": "Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding.",
+  "type": "library",
+  "license": "Apache-2.0",
+  "homepage": "https://nebulatoken.dev",
+  "keywords": ["refresh-token", "authentication", "security", "oauth2", "rfc9700", "token-rotation"],
+  "authors": [
+    {
+      "name": "Matteo Teodori",
+      "email": "hello@nebulatoken.dev"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/nebula-token/nebula-token/issues",
+    "source": "https://github.com/nebula-token/nebula-token",
+    "docs": "https://github.com/nebula-token/nebula-token/blob/main/SPECIFICATION.md",
+    "security": "https://github.com/nebula-token/nebula-token/blob/main/SECURITY.md"
+  },
+  "require": {
+    "php": ">=8.3"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
+  },
+  "autoload": {
+    "psr-4": {
+      "NebulaToken\\": "packages/php/src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "NebulaToken\\Tests\\": "packages/php/tests/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit -c packages/php/phpunit.xml"
+  },
+  "extra": {
+    "nebula-token": {
+      "note": "This is the one and only manifest for the PHP package, and it sits at the repository root because Packagist reads composer.json from a repository root only. NEBULA is a ten-language monorepo; the PHP sources are packages/php. The dist archive is trimmed to PHP by the export-ignore rules in the root .gitattributes -- Composer builds it with git archive, which honours them -- so a consumer downloads PHP, LICENSE and README.md and none of the other nine languages. There is deliberately no \"version\" key: Packagist reads the git tag, and a version key here would silently override it."
+    }
+  }
+}
