@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nebula-token"
-version = "1.0.1-rc.3"
+version = "1.0.1"
 description = "Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding. Stdlib only."
 readme = "README.md"
 # PEP 639: an SPDX expression, not a table. The file named here is what a

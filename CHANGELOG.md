@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.0.1-rc.3] - 2026-07-30
+## [1.0.1] - 2026-07-30
 
 Release automation only. `SPECIFICATION.md`, both vector files and all ten
 implementations are byte-identical to `1.0.0`.
@@ -21,6 +21,15 @@ implementations are byte-identical to `1.0.0`.
   `actions/setup-node` writes when `NODE_AUTH_TOKEN` is unset. An empty token is
   a credential, not the absence of one, so npm skipped the OIDC exchange
   entirely and failed with a misleading `E404` against a package that exists.
+- `packages/java/pom.xml`: `central-publishing-maven-plugin` 0.5.0 → 0.11.0. The
+  bundle uploaded and validated correctly and the build then failed
+  deserialising the reply — Sonatype added a usage-limit `warnings` field that
+  0.5.0's response model rejects as an unknown property. The change is
+  server-side, so pinning the old plugin was not the conservative option.
+- `packages/java/README.md`, the Java agent skill and `packages/go/README.md`
+  pinned `1.0.0` in their install snippets. Maven Central and the Go module
+  proxy never received `1.0.0`, so those coordinates resolve to nothing; they
+  name `1.0.1`, the first version those two ecosystems actually carry.
 
 ## [1.0.0] - 2026-07-30
 
@@ -38,5 +47,5 @@ implementations are byte-identical to `1.0.0`.
   window, family revocation, sender (device) binding, dual expiry clocks,
   pepper rotation via `kid`.
 
-[1.0.1-rc.3]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1-rc.3
+[1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
 [1.0.0]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.0

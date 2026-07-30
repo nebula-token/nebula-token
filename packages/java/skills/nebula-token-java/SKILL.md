@@ -14,7 +14,7 @@ Normative behavior: `SPECIFICATION.md` in the repository root.
 ## Install
 
 ```
-Maven/Gradle: dev.nebulatoken:nebula-token:1.0.0
+Maven/Gradle: dev.nebulatoken:nebula-token:1.0.1
 ```
 
 ## Core integration
