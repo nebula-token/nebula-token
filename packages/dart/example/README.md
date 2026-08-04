@@ -31,8 +31,11 @@ Future<void> main() async {
 
   final result = await engine.refresh(issued.token);
   switch (result) {
-    case RefreshSuccess(:final token):
-      stdout.writeln('rotated: $token');
+    case RefreshSuccess(:final token, :final generation):
+      // Send `token` to the client; never write it to a log or to stdout
+      // ([N-14], [N-46]). The generation and the selector are safe to print,
+      // and the selector is the designated correlation id.
+      stdout.writeln('rotated to generation $generation');
     case RefreshFailure(:final error):
       stdout.writeln('refused: ${error.code}');
   }

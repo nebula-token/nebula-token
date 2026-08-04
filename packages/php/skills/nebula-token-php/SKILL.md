@@ -42,9 +42,13 @@ if ($result->ok) {
             // security event: the family is already revoked — alert, force re-login
             $this->alert($result->userId, $result->familyId),
         ErrorCode::Conflict =>
-            // a concurrent refresh won the compare-and-set: nothing was rotated,
-            // retry the refresh once with the same token
-            $this->retryOnce(),
+            // a concurrent refresh won the compare-and-set: nothing was rotated.
+            // Answer 409 and leave the cookie alone — the CLIENT retries once,
+            // by which time the winner's Set-Cookie has landed and the retry
+            // presents the SUCCESSOR. Never retry here with the same token: the
+            // winner has already rotated it, so the retry is a replay and burns
+            // the family ([N-35]).
+            $this->conflict(),
         default => $this->requireLogin(),
     };
 }
@@ -84,7 +88,7 @@ The API is synchronous — a natural fit for PHP-FPM request lifecycles.
 ## Common mistakes to avoid
 
 - Reusing the presented refresh token after a successful refresh — it is dead; always persist the returned one.
-- Retrying a failed refresh with the same token in client retry loops — outside the grace window this burns the family (by design). `CONFLICT` is the one code that is meant to be retried.
+- Retrying a failed refresh with the same token in client retry loops — outside the grace window this burns the family (by design). `CONFLICT` is the one code meant to be retried, and the retry is the *client's*, with the successor it has by then received — a server-side retry re-presents the token the winner just rotated, which is a replay.
 - Implementing `markRotated` as an unconditional `UPDATE` — it re-opens the race the compare-and-set exists to close.
 - Deleting rotated/revoked rows early (a Redis TTL at rotation, a nightly `DELETE WHERE status <> 'active'`) — it silently turns every replay into `NOT_FOUND` and disables reuse detection.
 - Putting user data or expiry claims "inside" the token — NEBULA tokens are opaque by design; claims belong in the short-lived access token.

@@ -1,6 +1,6 @@
 # nebula_token (Elixir)
 
-Elixir implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). `:crypto` + stdlib only, no runtime dependencies.
+Elixir implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). `:crypto` + stdlib only, no runtime dependencies. Implements `spec_version = 1`.
 
 **Requires Elixir ≥ 1.18 and Erlang/OTP ≥ 25.** The constant-time comparison the specification mandates ([N-31]) is `:crypto.hash_equals/2`, added in OTP 25, and it backs *both* the verifier proof and the sender binding. On an older OTP `issue/3` would work while every `refresh/3` raised `UndefinedFunctionError`, so `mix.exs` refuses to build there rather than letting the defect reach production.
 
@@ -51,7 +51,7 @@ case NebulaToken.Engine.refresh(engine, presented_token, device_id) do
 end
 
 # Logout / incident response
-NebulaToken.Engine.revoke_token(engine, token)          # authenticated, by token
+{:ok, _} = NebulaToken.Engine.revoke_token(engine, token) # authenticated; it can refuse
 NebulaToken.Engine.revoke_family(engine, family_id)     # administrative
 NebulaToken.Engine.revoke_all_for_user(engine, user_id) # administrative
 ```

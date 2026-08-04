@@ -2,6 +2,7 @@
 
 C# implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens
 (RFC 9700 model). BCL only, no third-party dependencies. Targets `net10.0`.
+Implements `spec_version = 1`.
 
 ```
 dotnet add package NebulaToken
@@ -42,7 +43,8 @@ else if (result.Error is ErrorCode.ReuseDetected or ErrorCode.DeviceMismatch)
 }
 
 // Logout / incident response
-await engine.RevokeTokenAsync(token);          // authenticated: proves the verifier
+var revoked = await engine.RevokeTokenAsync(token);  // authenticated: proves the verifier
+if (!revoked.Ok) { /* it REFUSED — do not answer 204 ([N-36]) */ }
 await engine.RevokeFamilyAsync(familyId);      // administrative
 await engine.RevokeAllForUserAsync("usr_1");   // administrative
 ```

@@ -28,7 +28,8 @@ if ($result->ok) {
     // $result->error, plus ->userId / ->familyId when a record was resolved
 }
 
-$engine->revokeToken($issued->token);   // authenticated logout -> RevokeResult
+$revoked = $engine->revokeToken($issued->token);  // authenticated; it can refuse
+if (!$revoked->ok) { /* do not answer 204 ([N-36]) */ }
 $engine->revokeFamily($familyId);       // administrative, returns the count
 $engine->revokeAllForUser('usr_1');     // administrative, returns the count
 ```

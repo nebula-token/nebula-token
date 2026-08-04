@@ -17,9 +17,11 @@ Best practices demonstrated:
     here and return a protocol-looking value.
   * `delete_expired()` for periodic GC — keep rotated/revoked rows until the
     family's absolute deadline: they are what makes reuse detection work ([N-15]).
-  * Wrap each refresh request in ONE transaction at the call site
-    (`with store.tx(): engine.refresh(...)`) so insert + mark_rotated commit
-    atomically and a crash cannot leave a half-rotated family ([N-22]).
+  * The connection is put in autocommit mode, so every write is durable on its
+    own. Wrapping a refresh request in ONE transaction at the call site
+    (`with store.tx(): engine.refresh(...)`) additionally makes insert +
+    mark_rotated commit together, so a crash between them cannot leave a
+    half-rotated family ([N-22]).
 
 For PostgreSQL: replace `?` placeholders with `%s`, connect with psycopg,
 and keep everything else identical (schema in docs/STORE.md).
@@ -64,16 +66,32 @@ class SqliteRefreshTokenStore:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
+        # sqlite3 defaults to isolation_level = '': it opens an implicit
+        # transaction before DML and never commits on its own. Left that way,
+        # every write here is invisible to any other connection and is rolled
+        # back when this one closes — so issue() would hand the caller a live
+        # token for a row that does not exist, and revoke_token() would report
+        # `revoked: N` for an UPDATE that never lands. That is precisely the
+        # failure [N-20] forbids reporting. None is autocommit: each statement
+        # is durable on its own, and tx() below still groups a whole refresh
+        # into one transaction for [N-22].
+        conn.isolation_level = None
         conn.executescript(SCHEMA)
 
     @contextmanager
     def tx(self) -> Generator[None, None, None]:
-        """Wrap a whole refresh request for atomicity ([N-22])."""
+        """Wrap a whole refresh request for atomicity ([N-22]).
+
+        Optional: the store is durable without it. What it adds is that the
+        successor insert and the predecessor's compare-and-set commit together,
+        so a crash between them cannot leave a half-rotated family.
+        """
+        self._conn.execute("BEGIN")
         try:
             yield
-            self._conn.commit()
+            self._conn.execute("COMMIT")
         except Exception:
-            self._conn.rollback()
+            self._conn.execute("ROLLBACK")
             raise
 
     def find_by_selector(self, selector: str) -> Optional[TokenRecord]:

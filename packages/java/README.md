@@ -1,6 +1,6 @@
 # nebula-token (Java)
 
-Java implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). JDK standard library only, no runtime dependencies (JDK ≥ 17).
+Java implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). JDK standard library only, no runtime dependencies (JDK ≥ 17). Implements `spec_version = 1`.
 
 ```xml
 <dependency>
@@ -31,7 +31,8 @@ switch (engine.refresh(presented, deviceId)) {
 }
 
 // Logout and incident response.
-engine.revokeToken(presented);      // authenticated: proves the verifier
+var revoked = engine.revokeToken(presented);  // authenticated: proves the verifier
+if (!revoked.ok()) { /* it REFUSED — do not answer 204 ([N-36]) */ }
 engine.revokeFamily(familyId);      // administrative, no token needed
 engine.revokeAllForUser("usr_1");   // returns how many records were revoked
 ```
