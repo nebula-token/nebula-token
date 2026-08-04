@@ -68,9 +68,10 @@
 //
 // The manifest deliberately carries no `version` on its entries. Without one,
 // an installed plugin pins to the git commit SHA it was fetched at, which is
-// what we want while 1.0.0 is unreleased and no tag exists. A version here
-// would also be an eleventh place to bump on release, unknown to
-// scripts/version.mjs, and wrong the moment somebody forgets it.
+// what we want: an install tracks the exact tree it was fetched from rather
+// than a number that has to be kept in step. A version here would also be one
+// more place to bump on release, unknown to scripts/version.mjs, and wrong the
+// moment somebody forgets it.
 
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";

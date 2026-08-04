@@ -50,7 +50,7 @@ There is deliberately **no cryptographic novelty** here: HMAC-SHA-256, CSPRNG ou
 | TypeScript | `nebula-token` | [`packages/typescript`](packages/typescript) | none |
 | Python | `nebula-token` | [`packages/python`](packages/python) | none |
 | Go | `github.com/nebula-token/nebula-token/packages/go` | [`packages/go`](packages/go) | none |
-| Rust | `nebula-token` | [`packages/rust`](packages/rust) | RustCrypto crates |
+| Rust | `nebula-token` | [`packages/rust`](packages/rust) | 6 crates: `hmac`, `sha2`, `subtle` (RustCrypto), `base64`, `hex`, `rand` |
 | Java | `dev.nebulatoken:nebula-token` | [`packages/java`](packages/java) | none |
 | PHP | `nebula-token/nebula-token` | [`packages/php`](packages/php) | none |
 | C# / .NET | `NebulaToken` | [`packages/csharp`](packages/csharp) | none |
@@ -156,12 +156,12 @@ Vulnerabilities go through [SECURITY.md](SECURITY.md), never public issues.
 
 ## Maturity, stated plainly
 
-A library on an authentication path should tell you what it has and has not been through. NEBULA's position, as of 1.0.0:
+A library on an authentication path should tell you what it has and has not been through. NEBULA's position, as of the 1.0 line:
 
 - **No independent security audit.** None has been performed. [`SECURITY.md`](SECURITY.md) keeps the full list of what is missing — no formal verification of the rotation state machine, no fuzzing beyond the published vectors.
 - **No production track record.** These implementations are new. Nobody can yet tell you how they behave at scale, because nobody has run them at scale.
-- **What is real is the conformance.** Behaviour is not asserted in prose and hoped for in code: it is pinned by 46 test vectors and 38 executable behavioural scenarios that every implementation runs on every CI run, in all ten languages, with a runner that must assert the published case counts and fail on an empty section ([N-48]). Two implementations that pass agree at every point those artefacts observe: the accept/reject decision for the token strings the parsing vectors cover, the byte-level output of both keyed hashes, and — per scenario — the outcome code, the generation, the family and expiry relations, and the resulting multiset of record statuses in the store. That is a bounded claim rather than a universal one, and it is deliberately the one this project makes: the vectors do not observe timing, log output or store call ordering, and no differential harness yet drives all ten from one random transcript. It is also checkable — checkable by you, not just by our CI: `node scripts/docker-test.mjs` runs all ten suites in official images pinned by digest at the declared version floors, with nothing installed but Docker ([`docker/README.md`](docker/README.md)).
-- **The surface is small on purpose.** Each implementation is one small, dependency-free module meant to be read in a sitting. The most useful thing you can do before adopting it is read it.
+- **What is real is the conformance.** Behaviour is not asserted in prose and hoped for in code: it is pinned by 46 test vectors and 38 executable behavioural scenarios that every implementation runs on every CI run, in all ten languages, with a runner that must assert the published case counts and fail on an empty section ([N-48]). Two implementations that pass agree at every point those artefacts observe: the accept/reject decision for the token strings the parsing vectors cover, the byte-level output of both keyed hashes, and — for each scenario, over whichever of them it asserts — the outcome code, the generation, the family and expiry relations, and the resulting multiset of record statuses in the store. That is a bounded claim rather than a universal one, and it is deliberately the one this project makes: the vectors do not observe timing, log output or store call ordering, and no differential harness yet drives all ten from one random transcript. It is also checkable — checkable by you, not just by our CI: `node scripts/docker-test.mjs` runs all ten suites in official images pinned by digest at the declared version floors, with nothing installed but Docker ([`docker/README.md`](docker/README.md)).
+- **The surface is small on purpose.** Each implementation is one small package — dependency-free in eight of the ten — meant to be read in a sitting. The most useful thing you can do before adopting it is read it.
 
 What is frozen and what may still move is spelled out in [`COMPATIBILITY.md`](COMPATIBILITY.md); how a third-party port may claim conformance ([N-53]) is in [`GOVERNANCE.md`](GOVERNANCE.md).
 
@@ -169,7 +169,7 @@ What is frozen and what may still move is spelled out in [`COMPATIBILITY.md`](CO
 
 ```
 SPECIFICATION.md           ← the normative definition (start here), requirements [N-1]…[N-53]
-spec/test-vectors.json     ← 46 shared conformance cases: constants, hashing, parsing
+spec/test-vectors.json     ← 46 shared conformance cases: hashing and parsing (plus a constants block)
 spec/behavior-vectors.json ← 38 normative behavioural scenarios — the machine-readable suite
 spec/traceability.json     ← generated: which vectors and scenarios cover each requirement
 spec/schema/*.sql          ← the store schema for PostgreSQL, MySQL and SQLite

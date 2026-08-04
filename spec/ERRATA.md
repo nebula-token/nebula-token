@@ -11,7 +11,7 @@ follows the specification plus this file is following the current text.
 An erratum corrects an **internal contradiction or an ambiguity** in the
 specification without changing what a conforming implementation does. Requirement
 ids are never renumbered and `spec_version` is never bumped for one — that is the
-whole point of the category. See [`VERSIONING.md`](../VERSIONING.md) §2 and
+whole point of the category. See [`VERSIONING.md`](../VERSIONING.md) §1 and
 [`GOVERNANCE.md`](../GOVERNANCE.md) for who may publish one and on what timeline.
 
 A change that alters an accept/reject decision, a hash, an error code, a record

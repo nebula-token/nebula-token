@@ -207,8 +207,9 @@ goodwill:
   at any time, for any reason, without asking.
 - The specification and the vectors are the durable artefacts. An implementation
   can be rewritten from them; that is what the ten in this repository demonstrate.
-- Security responders retain the ability to publish an advisory, so a
-  vulnerability is never gated on one person.
+- Security responders retain the ability to publish an advisory, so that once a
+  second one exists a vulnerability is not gated on one person. Until then it is
+  — see §2, and [`SECURITY.md`](SECURITY.md), which says so plainly.
 - Should the lead maintainer be unreachable for 90 days, the security responders
   and package maintainers may jointly designate a new lead, in a public issue.
   The registry namespaces would need transferring, which is a request to each

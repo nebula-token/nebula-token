@@ -148,6 +148,29 @@ does not have ten toolchains. See [`docker/README.md`](docker/README.md).
     points at the directory step 9 created. `scripts/check-marketplace.mjs`
     fails the build both when an entry has no skill and when a skill has no
     entry, so a language added without this step does not merge.
+11. Add the row to the per-package command table in
+    [`AGENTS.md`](AGENTS.md) — regenerate it with `node scripts/check-agents-md.mjs
+    --write` — **and** the matching `PACKAGES` entry in
+    `scripts/check-agents-md.mjs`. That script reads `packages/` from disk, so a
+    directory with no row fails the gate outright.
+12. Add a service to [`docker/compose.yml`](docker/compose.yml), digest-pinned at
+    the floor, running the same commands as the CI job of step 7. Any deliberate
+    difference carries a `# not-in-ci:` line stating its reason.
+    `scripts/docker-test.mjs` also reads `packages/` from disk and fails on a
+    package with no service.
+13. Add the runtime to [`.github/runtime-matrix.json`](.github/runtime-matrix.json)
+    in the same commit as the package manifest — either alone fails the build —
+    and regenerate the `SUPPORT.md` table with
+    `node scripts/check-runtime-matrix.mjs --write`.
+14. Add the manifest's version site to `VERSIONED` in `scripts/version.mjs`, and
+    the row to the version-surface table in [`RELEASING.md`](RELEASING.md). A new
+    manifest is invisible to the version gate until it is listed, which is the
+    one failure mode that survives to a published tag. If the package ships a
+    changelog, add it to `DATED` too.
+
+All fourteen are required: steps 11–13 are each enforced by a gate that
+enumerates `packages/` itself, so a language added without them does not build,
+and step 14 is the one that fails silently instead.
 
 ### Third-party ports
 

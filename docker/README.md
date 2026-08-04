@@ -159,12 +159,15 @@ service (the official php image ships neither, so the harness does what
 /work` (its composer project root is the repository root, because Packagist
 reads `composer.json` from a repository root only — CI's steps are already there
 by default), Hex in the Elixir service
-(the official elixir image does not ship it), and the `.NET` service's written-out
-`-f net10.0` — CI reads that framework from its matrix, and compose has no matrix
-to read. That last one used to be a much larger exception: while the package
-multi-targeted `net8.0` and `net10.0`, every .NET command needed a
-`-p:TargetFrameworks=` override, because one official image carries one SDK and
-SDK 8 cannot even restore a project that names `net10.0`.
+(the official elixir image does not ship it), and the Ruby service's guard line.
+The `.NET` service used to be the largest exception here and is now none at all:
+while the package multi-targeted `net8.0` and `net10.0`, every .NET command
+needed a `-p:TargetFrameworks=` override, because one official image carries one
+SDK and SDK 8 cannot even restore a project that names `net10.0`. The package
+targets `net10.0` alone now, so those overrides are gone and so is the `-f` that
+outlived them — on a solution it splits the library into two project instances
+and races them into `MSB4018`. The service runs the same three commands as CI,
+verbatim.
 
 ## Caches, volumes and disk
 

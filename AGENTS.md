@@ -200,7 +200,7 @@ the package manifest in the same commit. Either one alone fails the build.
 |---|---|
 | What exactly is required? | [`SPECIFICATION.md`](SPECIFICATION.md) — cite the [N-*] id |
 | How does a change get made, and by whom? | [`CONTRIBUTING.md`](CONTRIBUTING.md), [`GOVERNANCE.md`](GOVERNANCE.md) |
-| Adding an eleventh language | [`CONTRIBUTING.md`](CONTRIBUTING.md), "Adding an implementation" — ten numbered steps, all of them required |
+| Adding an eleventh language | [`CONTRIBUTING.md`](CONTRIBUTING.md), "Adding an implementation" — fourteen numbered steps, all of them required |
 | What may break, and when | [`COMPATIBILITY.md`](COMPATIBILITY.md), [`VERSIONING.md`](VERSIONING.md) |
 | Reporting or fixing a vulnerability | [`SECURITY.md`](SECURITY.md) |
 | Publishing | [`RELEASING.md`](RELEASING.md) |

@@ -1,6 +1,6 @@
 # nebula-token (Ruby)
 
-Ruby implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). Standard library only (`openssl`, `securerandom`), no gem dependencies, Ruby ≥ 3.3.
+Ruby implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). Standard library only (`openssl`, `securerandom`), no gem dependencies, Ruby ≥ 3.3. Implements `spec_version = 1`.
 
 ```
 gem install nebula-token

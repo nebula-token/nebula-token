@@ -1,6 +1,6 @@
 # nebula-token
 
-TypeScript reference implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). Zero dependencies, Node ≥ 22.
+TypeScript reference implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refresh tokens (RFC 9700 model). Zero dependencies, Node ≥ 22. Implements `spec_version = 1`.
 
 ```
 npm install nebula-token
