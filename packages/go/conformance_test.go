@@ -9,6 +9,7 @@ package nebulatoken
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -36,8 +37,10 @@ type testVectors struct {
 		ID       string `json:"id"`
 		Pepper   string `json:"pepper"`
 		DeviceID string `json:"device_id"`
-		Note     string `json:"note"`
-		Expected string `json:"expected_hmac_sha256_hex"`
+		// Optional, and so empty for every case that omits it.
+		DeviceIDBytes string `json:"device_id_bytes"`
+		Note          string `json:"note"`
+		Expected      string `json:"expected_hmac_sha256_hex"`
 	} `json:"device_hashing"`
 	Parsing []struct {
 		ID       string `json:"id"`
@@ -169,6 +172,30 @@ func TestDeviceHashingVectors(t *testing.T) {
 		}
 		if got != c.Expected {
 			t.Errorf("%s (%s): got %s want %s", c.ID, c.Note, got, c.Expected)
+		}
+		// [N-11] keys the HMAC on the UTF-8 encoding of the identifier, not on
+		// however the runtime happens to hold it. A Go string is already a byte
+		// sequence, so the decoded bytes go straight in; a runner whose strings
+		// are UTF-16 decodes them back to one first. Either way the case's one
+		// expected hash must come out, which is the portable statement of the
+		// rule — and the assertion that a runtime cannot decide a device
+		// identifier on anything but its bytes.
+		if c.DeviceIDBytes != "" {
+			raw, err := hex.DecodeString(c.DeviceIDBytes)
+			if err != nil {
+				t.Fatalf("%s: unusable vector: %v", c.ID, err)
+			}
+			fromBytes := string(raw)
+			if fromBytes != c.DeviceID {
+				t.Errorf("%s: device_id_bytes must be the UTF-8 encoding of device_id", c.ID)
+			}
+			got, err := HashDeviceID(c.Pepper, fromBytes)
+			if err != nil {
+				t.Fatalf("%s from bytes: unexpected error %v", c.ID, err)
+			}
+			if got != c.Expected {
+				t.Errorf("%s from bytes: got %s want %s", c.ID, got, c.Expected)
+			}
 		}
 		n++
 	}

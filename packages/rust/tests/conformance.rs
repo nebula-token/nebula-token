@@ -138,6 +138,29 @@ fn device_hashing_vectors() {
             str_of(case, "id"),
             str_of(case, "note")
         );
+        // [N-11] keys the HMAC on the UTF-8 encoding of the identifier, not on
+        // however the runtime happens to hold it. A Rust `&str` *is* that
+        // encoding, so the faithful conversion is `String::from_utf8`, and its
+        // success is part of the assertion; a runner whose strings carry a
+        // separate encoding tag has more to do. Either way the case's one
+        // expected hash must come out, which is the portable statement of the
+        // rule — and the assertion that a runtime cannot decide a device
+        // identifier on anything but its bytes.
+        if let Some(hex_bytes) = case["device_id_bytes"].as_str() {
+            let id = str_of(case, "id");
+            let bytes = hex::decode(hex_bytes).expect("vector device_id_bytes is hex");
+            let from_bytes = String::from_utf8(bytes).expect("vector device_id_bytes is UTF-8");
+            assert_eq!(
+                from_bytes,
+                str_of(case, "device_id"),
+                "{id}: device_id_bytes must be the UTF-8 encoding of device_id"
+            );
+            assert_eq!(
+                hash_device_id(str_of(case, "pepper"), &from_bytes),
+                str_of(case, "expected_hmac_sha256_hex"),
+                "{id} from bytes"
+            );
+        }
         executed += 1;
     }
     assert_eq!(

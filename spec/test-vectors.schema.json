@@ -218,6 +218,11 @@
           "$comment": "May be empty: an empty device identifier is a bound value distinct from an absent one.",
           "type": "string"
         },
+        "device_id_bytes": {
+          "$comment": "OPTIONAL. The UTF-8 encoding of `device_id`, as lowercase hex. Present only on cases that exist to pin the byte form against the string form: a runner in a language whose strings are bytes (or carry an encoding tag distinct from them) MUST feed these bytes, and one whose strings are Unicode MUST decode them as UTF-8; either way the case's expected_hmac_sha256_hex is unchanged, because [N-11] keys the HMAC on the UTF-8 encoding and not on how the runtime happens to hold it.",
+          "type": "string",
+          "pattern": "^([0-9a-f]{2})+$"
+        },
         "note": {
           "$ref": "#/$defs/note"
         },

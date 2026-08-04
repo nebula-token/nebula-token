@@ -6,9 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-`SPECIFICATION.md` and both vector files are unchanged: every entry below either
-brings one implementation back into line with the other nine, or corrects a
-document. No conforming behaviour changes for the other nine packages.
+`spec_version` remains **1** and no conforming behaviour changes. One erratum is
+published, and `spec/test-vectors.json` gains two cases for a rule that was
+already normative; everything else either brings one implementation back into
+line with the other nine, or corrects a document.
+
+### Specification
+- **Erratum E-1** ([`spec/ERRATA.md`](spec/ERRATA.md)) — the first published for
+  `spec_version = 1`. [N-11] said the `deviceIdHash` message is "the UTF-8
+  encoding of the string", which is unambiguous in nine of the ten runtimes and
+  not in the tenth: a Ruby `String` carries a declared encoding alongside its
+  bytes, and "the string" can be read as either. [N-11] now states that where
+  those bytes are *already* a valid UTF-8 encoding they **are** the input —
+  acceptance is not decided on the declared encoding, and the value is not
+  transcoded from it, which the requirement's existing sentence already forbade
+  as "any other text encoding". Nine implementations read it that way from the
+  start and are unchanged; see E-1 for why this is a clarification and not a
+  behavioural change.
+- `spec/test-vectors.json`: cases `dh-08` and `dh-09` pin it, carrying a new
+  OPTIONAL `device_id_bytes` field — the UTF-8 encoding of the case's
+  `device_id`, as lowercase hex. A runner whose strings are bytes feeds those
+  bytes; one whose strings are Unicode decodes them; both must produce the
+  case's single expected hash. `dh-09` additionally carries a
+  supplementary-plane character, which is a surrogate *pair* in the UTF-16
+  string types of JavaScript, Java, C# and Dart and was previously unexercised.
+  `counts.device_hashing` 7 → 9 and all ten runners execute them ([N-48]).
 
 ### Fixed
 - `packages/ruby`: the engine tested the compare-and-set return value directly,

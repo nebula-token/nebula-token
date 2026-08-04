@@ -19,7 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ASCII-8BIT` — from `String#b`, `File.binread` or a socket read. In `refresh`
   that is a sender-binding failure, so the whole family was revoked where the
   other nine rotate normally ([N-11], [N-32]). [N-12]'s treatment of invalid
-  Unicode is unchanged.
+  Unicode is unchanged. Ruby is the only one of the ten where a string carries a
+  declared encoding distinct from its bytes, so it is the only port this could
+  affect; erratum E-1 records the clarification to [N-11], and the shared cases
+  `dh-08`/`dh-09` now pin it for every implementation.
 
 ## [1.0.1] - 2026-07-30
 

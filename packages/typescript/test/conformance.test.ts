@@ -49,6 +49,18 @@ test('device hashing vectors', () => {
   let n = 0;
   for (const v of vectors.device_hashing) {
     assert.equal(hashDeviceId(v.pepper, v.device_id), v.expected_hmac_sha256_hex, v.id);
+    if (v.device_id_bytes !== undefined) {
+      // [N-11] keys the HMAC on the UTF-8 encoding of the identifier, not on
+      // however the runtime happens to hold it. A JavaScript string is UTF-16,
+      // so the byte form is decoded back to a string here; a runner whose
+      // strings ARE bytes feeds them straight in. Either way the case's one
+      // expected hash must come out, which is the portable statement of the
+      // rule — and the assertion that a runtime cannot decide a device
+      // identifier on anything but its bytes.
+      const fromBytes = Buffer.from(v.device_id_bytes, 'hex').toString('utf8');
+      assert.equal(fromBytes, v.device_id, `${v.id}: device_id_bytes must be the UTF-8 encoding of device_id`);
+      assert.equal(hashDeviceId(v.pepper, fromBytes), v.expected_hmac_sha256_hex, `${v.id} from bytes`);
+    }
     n++;
   }
   assert.equal(n, vectors.counts.device_hashing, 'executed count must equal published count ([N-48])');

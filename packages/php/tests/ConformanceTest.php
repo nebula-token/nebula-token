@@ -108,6 +108,29 @@ final class ConformanceTest extends TestCase
                 Nebula::hashDeviceId($v['pepper'], $v['device_id']),
                 $v['id'] . ': ' . $v['note'],
             );
+            if (isset($v['device_id_bytes'])) {
+                // [N-11] keys the HMAC on the UTF-8 encoding of the identifier,
+                // not on however the runtime happens to hold it. A PHP string
+                // *is* a byte string, so the decoded bytes go straight in with
+                // nothing converting them; a runner whose strings carry an
+                // encoding separate from their bytes has more to do. Either way
+                // the case's one expected hash must come out, which is the
+                // portable statement of the rule — and the assertion that a
+                // runtime cannot decide a device identifier on anything but its
+                // bytes.
+                $fromBytes = hex2bin($v['device_id_bytes']);
+                self::assertNotFalse($fromBytes, $v['id'] . ': device_id_bytes must be hex');
+                self::assertSame(
+                    $v['device_id'],
+                    $fromBytes,
+                    $v['id'] . ': device_id_bytes must be the UTF-8 encoding of device_id',
+                );
+                self::assertSame(
+                    $v['expected_hmac_sha256_hex'],
+                    Nebula::hashDeviceId($v['pepper'], $fromBytes),
+                    $v['id'] . ' from bytes',
+                );
+            }
             $n++;
         }
         self::assertSame($vectors['counts']['device_hashing'], $n, 'executed count must equal published count ([N-48])');

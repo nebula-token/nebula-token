@@ -80,6 +80,18 @@ def test_device_hashing_vectors() -> None:
     for v in VECTORS["device_hashing"]:
         actual = nt.hash_device_id(v["pepper"], v["device_id"])
         assert actual == v["expected_hmac_sha256_hex"], f"{v['id']}: {v['note']}"
+        if "device_id_bytes" in v:
+            # [N-11] keys the HMAC on the UTF-8 encoding of the identifier, not
+            # on however the runtime happens to hold it. A Python str is a
+            # sequence of code points, so the byte form is decoded back to a str
+            # here; a runner whose strings ARE bytes feeds them straight in.
+            # Either way the case's one expected hash must come out, which is
+            # the portable statement of the rule — and the assertion that a
+            # runtime cannot decide a device identifier on anything but its
+            # bytes.
+            from_bytes = bytes.fromhex(v["device_id_bytes"]).decode("utf-8")
+            assert from_bytes == v["device_id"], f"{v['id']}: device_id_bytes must be the UTF-8 encoding of device_id"
+            assert nt.hash_device_id(v["pepper"], from_bytes) == v["expected_hmac_sha256_hex"], f"{v['id']} from bytes"
         executed += 1
     assert executed == VECTORS["counts"]["device_hashing"], "executed count must equal published count ([N-48])"
 

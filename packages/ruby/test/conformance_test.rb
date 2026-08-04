@@ -81,6 +81,20 @@ class ConformanceTest < Minitest::Test
     VECTORS['device_hashing'].each do |v|
       assert_equal v['expected_hmac_sha256_hex'],
                    NebulaToken.hash_device_id(v['pepper'], v['device_id']), "#{v['id']}: #{v['note']}"
+      if v['device_id_bytes']
+        # Ruby is the one language of the ten whose String carries an encoding
+        # tag distinct from its bytes, so it is the one where this vector can
+        # fail. [N-11] keys the HMAC on the UTF-8 encoding of the identifier,
+        # and these bytes ARE that encoding — deciding on the tag instead
+        # refuses an identifier the other nine accept, and in refresh that
+        # refusal is a sender-binding failure that revokes the whole family.
+        bytes = [v['device_id_bytes']].pack('H*')
+        assert_equal Encoding::BINARY, bytes.encoding, "#{v['id']}: the byte form must be binary-tagged"
+        assert_equal v['device_id'].b, bytes,
+                     "#{v['id']}: device_id_bytes must be the UTF-8 encoding of device_id"
+        assert_equal v['expected_hmac_sha256_hex'],
+                     NebulaToken.hash_device_id(v['pepper'], bytes), "#{v['id']} from bytes"
+      end
       executed += 1
     end
     assert_equal VECTORS['counts']['device_hashing'], executed,

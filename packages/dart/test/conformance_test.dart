@@ -21,6 +21,14 @@ File _specFile(String name) {
   }
 }
 
+/// The raw bytes of a hex string from the vectors. Kept local because the
+/// package depends on `crypto` alone, and a hex decoder is not worth a second
+/// dependency to a test.
+List<int> _hexBytes(String hex) => <int>[
+  for (int i = 0; i < hex.length; i += 2)
+    int.parse(hex.substring(i, i + 2), radix: 16),
+];
+
 void main() {
   final Map<String, Object?> vectors =
       jsonDecode(_specFile('test-vectors.json').readAsStringSync())
@@ -100,6 +108,29 @@ void main() {
         v['expected_hmac_sha256_hex'],
         reason: '${v['id']}: ${v['note']}',
       );
+      final Object? bytes = v['device_id_bytes'];
+      if (bytes != null) {
+        // [N-11] keys the HMAC on the UTF-8 encoding of the identifier, not on
+        // however the runtime happens to hold it. A Dart String is UTF-16 —
+        // dh-09's astral code point is a surrogate pair in one — so the byte
+        // form is decoded back to a String here; a runner whose strings ARE
+        // bytes feeds them straight in. Either way the case's one expected hash
+        // must come out, which is the portable statement of the rule — and the
+        // assertion that a runtime cannot decide a device identifier on
+        // anything but its bytes.
+        final String fromBytes = utf8.decode(_hexBytes(bytes as String));
+        expect(
+          fromBytes,
+          v['device_id'],
+          reason:
+              '${v['id']}: device_id_bytes must be the UTF-8 encoding of device_id',
+        );
+        expect(
+          nt.hashDeviceId(v['pepper']! as String, fromBytes),
+          v['expected_hmac_sha256_hex'],
+          reason: '${v['id']} from bytes',
+        );
+      }
       n++;
     }
     expect(

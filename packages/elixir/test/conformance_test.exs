@@ -62,6 +62,24 @@ defmodule NebulaToken.ConformanceTest do
                  v["expected_hmac_sha256_hex"],
                "#{v["id"]}: #{v["note"]}"
 
+        # [N-11] keys the HMAC on the UTF-8 encoding of the identifier, not on
+        # however the runtime happens to hold it. An Elixir binary IS bytes, so
+        # the decoded form goes straight in; a runner whose strings carry a
+        # separate encoding tag has more to do. Either way the case's one
+        # expected hash must come out, which is the portable statement of the
+        # rule — and the assertion that a runtime cannot decide a device
+        # identifier on anything but its bytes.
+        if v["device_id_bytes"] != nil do
+          from_bytes = Base.decode16!(v["device_id_bytes"], case: :lower)
+
+          assert from_bytes == v["device_id"],
+                 "#{v["id"]}: device_id_bytes must be the UTF-8 encoding of device_id"
+
+          assert NebulaToken.hash_device_id(v["pepper"], from_bytes) ==
+                   v["expected_hmac_sha256_hex"],
+                 "#{v["id"]} from bytes"
+        end
+
         n + 1
       end)
 

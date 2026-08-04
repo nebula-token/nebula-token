@@ -3,7 +3,9 @@ package dev.nebulatoken;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -77,6 +79,24 @@ class ConformanceTest {
             assertEquals(v.get("expected_hmac_sha256_hex").asText(),
                     Nebula.hashDeviceId(v.get("pepper").asText(), v.get("device_id").asText()),
                     v.get("id").asText() + ": " + v.get("note").asText());
+            if (v.has("device_id_bytes")) {
+                // [N-11] keys the HMAC on the UTF-8 encoding of the identifier,
+                // not on however the runtime happens to hold it. A Java String
+                // is UTF-16 -- dh-09's astral code point is a surrogate PAIR in
+                // one -- so the byte form is decoded back to a String here; a
+                // runner whose strings ARE bytes feeds them straight in. Either
+                // way the case's one expected hash must come out, which is the
+                // portable statement of the rule -- and the assertion that a
+                // runtime cannot decide a device identifier on anything but its
+                // bytes.
+                byte[] deviceIdBytes = HexFormat.of().parseHex(v.get("device_id_bytes").asText());
+                String fromBytes = new String(deviceIdBytes, StandardCharsets.UTF_8);
+                assertEquals(v.get("device_id").asText(), fromBytes,
+                        v.get("id").asText() + ": device_id_bytes must be the UTF-8 encoding of device_id");
+                assertEquals(v.get("expected_hmac_sha256_hex").asText(),
+                        Nebula.hashDeviceId(v.get("pepper").asText(), fromBytes),
+                        v.get("id").asText() + " from bytes");
+            }
             executed++;
         }
         assertExecuted(executed, "device_hashing");

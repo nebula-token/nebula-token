@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Xunit;
 
@@ -66,10 +67,28 @@ public class ConformanceTests
         var executed = 0;
         foreach (var v in Vectors.GetProperty("device_hashing").EnumerateArray())
         {
-            var actual = Nebula.HashDeviceId(
-                v.GetProperty("pepper").GetString()!,
-                v.GetProperty("device_id").GetString()!);
-            Assert.Equal(v.GetProperty("expected_hmac_sha256_hex").GetString(), actual);
+            var pepper = v.GetProperty("pepper").GetString()!;
+            var deviceId = v.GetProperty("device_id").GetString()!;
+            var expected = v.GetProperty("expected_hmac_sha256_hex").GetString();
+            var actual = Nebula.HashDeviceId(pepper, deviceId);
+            Assert.Equal(expected, actual);
+
+            if (v.TryGetProperty("device_id_bytes", out var deviceIdBytes))
+            {
+                // [N-11] keys the HMAC on the UTF-8 encoding of the identifier, not on
+                // however the runtime happens to hold it. A .NET string is UTF-16, so the
+                // byte form is decoded back to a string here — dh-09's astral code point
+                // arrives as a surrogate pair — and must still produce the case's one
+                // expected hash: the portable statement of the rule, and the assertion
+                // that a runtime cannot decide a device identifier on anything but its
+                // bytes.
+                var id = v.GetProperty("id").GetString();
+                var fromBytes = Encoding.UTF8.GetString(Convert.FromHexString(deviceIdBytes.GetString()!));
+                Assert.True(
+                    fromBytes == deviceId,
+                    $"{id}: device_id_bytes must be the UTF-8 encoding of device_id");
+                Assert.Equal(expected, Nebula.HashDeviceId(pepper, fromBytes));
+            }
             executed++;
         }
         Assert.Equal(Vectors.GetProperty("counts").GetProperty("device_hashing").GetInt32(), executed);
