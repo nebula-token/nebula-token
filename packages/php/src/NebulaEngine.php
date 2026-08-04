@@ -33,7 +33,7 @@ final class NebulaEngine
      * @throws NebulaConfigException on any violation of §5.
      */
     public function __construct(
-        array $peppers,
+        #[\SensitiveParameter] array $peppers,
         string $activeKid,
         RefreshTokenStore $store,
         int $absoluteTtlSeconds = Nebula::DEFAULT_ABSOLUTE_TTL,
@@ -112,7 +112,7 @@ final class NebulaEngine
      *
      * @throws NebulaConfigException if $deviceId is not valid UTF-8 ([N-12])
      */
-    public function issue(string $userId, ?string $deviceId = null): IssueResult
+    public function issue(string $userId, #[\SensitiveParameter] ?string $deviceId = null): IssueResult
     {
         // [N-12] at issue the value comes from the application, so surface the
         // defect at the call site rather than minting a binding that nothing
@@ -145,6 +145,16 @@ final class NebulaEngine
      * any framework error page that walks an object graph. The pepper is the key
      * that protects every session of every user, so keep it out of all of them.
      *
+     * KNOWN GAP: this hook is consulted by `var_dump()` and by the debuggers
+     * built on it, but NOT by `print_r()` or `var_export()`, which walk the
+     * property table directly and print private properties regardless. PHP
+     * offers no hook for those two, so closing it means the pepper map must
+     * stop being a plain property. Until then, `print_r($engine, true)` into a
+     * log line still leaks; the `#[\SensitiveParameter]` attributes on the
+     * constructor and on the token/device arguments close the adjacent
+     * exception-trace channel, which `zend.exception_ignore_args=0` leaves open
+     * by default in php.ini-development.
+     *
      * @return array<string, mixed>
      */
     public function __debugInfo(): array
@@ -171,7 +181,10 @@ final class NebulaEngine
      * left is the [N-26] table, and the step numbers in the trailing comments
      * are how a reader checks it against the spec.
      */
-    public function refresh(string $token, ?string $deviceId = null): RefreshResult // NOSONAR(php:S1142)
+    public function refresh(
+        #[\SensitiveParameter] string $token,
+        #[\SensitiveParameter] ?string $deviceId = null,
+    ): RefreshResult // NOSONAR(php:S1142)
     {
         $parsed = Nebula::parseToken($token);                                   // 1
         if ($parsed === null) {
@@ -241,7 +254,7 @@ final class NebulaEngine
      * php:S1142: the four returns are steps 1-4 of [N-26], each returning the
      * first failure. Same reasoning as refresh() above.
      */
-    public function revokeToken(string $token): RevokeResult // NOSONAR(php:S1142)
+    public function revokeToken(#[\SensitiveParameter] string $token): RevokeResult // NOSONAR(php:S1142)
     {
         $parsed = Nebula::parseToken($token);
         if ($parsed === null) {

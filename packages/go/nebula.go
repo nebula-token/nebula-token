@@ -6,7 +6,7 @@
 //
 // The import path is github.com/nebula-token/nebula-token/packages/go — the
 // module is a submodule of the NEBULA monorepo, so it is versioned by tags
-// prefixed with that directory (packages/go/v1.0.0), never by a bare vX.Y.Z.
+// prefixed with that directory (packages/go/vX.Y.Z), never by a bare vX.Y.Z.
 //
 // The package name is nebulatoken rather than nebula, and rather than the last
 // element of the path: the short name collides head-on with
@@ -31,6 +31,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -448,6 +449,45 @@ type Engine struct {
 	reuseGrace   int64
 	clock        func() int64
 }
+
+// String redacts the peppers ([N-14], [N-46]). fmt reads unexported fields by
+// reflection, so without this a single %+v on any struct that embeds an engine
+// — an application state struct, a slog.Any, a panic dump — prints every
+// configured secret. The kid NAMES stay visible: they are operator-chosen
+// identifiers, they appear in every token on the wire, and they are what makes
+// a rotation problem legible.
+//
+// The value receiver puts String in the method set of both Engine and *Engine,
+// so the redaction holds for the pointer NewEngine returns.
+func (e Engine) String() string {
+	kids := make([]string, 0, len(e.peppers))
+	for kid := range e.peppers {
+		kids = append(kids, kid)
+	}
+	sort.Strings(kids)
+	return fmt.Sprintf("Engine{Kids:%v ActiveKid:%s Peppers:<redacted> AbsoluteTTL:%d IdleTTL:%d ReuseGrace:%d}",
+		kids, e.activeKid, e.absoluteTTL, e.idleTTL, e.reuseGrace)
+}
+
+// GoString redacts under %#v too, which ignores Stringer.
+func (e Engine) GoString() string { return e.String() }
+
+// String and GoString redact the pepper map for the same reason Engine does:
+// a Config is ordinarily built inline from secrets just read out of the
+// environment, and it is live at exactly the moment a startup path is most
+// likely to log its inputs.
+func (c Config) String() string {
+	kids := make([]string, 0, len(c.Peppers))
+	for kid := range c.Peppers {
+		kids = append(kids, kid)
+	}
+	sort.Strings(kids)
+	return fmt.Sprintf("Config{Kids:%v ActiveKid:%s Peppers:<redacted> AbsoluteTTLSeconds:%d IdleTTLSeconds:%d ReuseGraceSeconds:%d}",
+		kids, c.ActiveKid, c.AbsoluteTTLSeconds, c.IdleTTLSeconds, c.ReuseGraceSeconds)
+}
+
+// GoString redacts under %#v too, which ignores Stringer.
+func (c Config) GoString() string { return c.String() }
 
 // NewEngine validates the configuration (§5) and returns an engine.
 //

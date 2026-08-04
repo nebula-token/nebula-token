@@ -143,7 +143,10 @@ final class Nebula
     }
 
     /** verifierHash = lowercase hex HMAC-SHA-256(pepper, verifier) ([N-11], [N-13]). */
-    public static function hashVerifier(string $pepper, string $verifier): string
+    public static function hashVerifier(
+        #[\SensitiveParameter] string $pepper,
+        #[\SensitiveParameter] string $verifier,
+    ): string
     {
         // The key is the pepper's bytes and the message is the raw decoded
         // verifier: no text transcoding happens on either operand ([N-11]).
@@ -157,7 +160,10 @@ final class Nebula
      * the attacker-reachable path must pre-check with {@see isWellFormedUtf8}
      * and treat the failure as a binding mismatch instead ([N-12]).
      */
-    public static function hashDeviceId(string $pepper, string $deviceId): string
+    public static function hashDeviceId(
+        #[\SensitiveParameter] string $pepper,
+        #[\SensitiveParameter] string $deviceId,
+    ): string
     {
         if (!self::isWellFormedUtf8($deviceId)) {
             // [N-14] the message names no value: the raw device id must not

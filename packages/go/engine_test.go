@@ -685,6 +685,40 @@ func TestNoRawSecretReachesTheStore(t *testing.T) {
 // locals — and the verifier as a plain byte slice. Only the rendering is
 // redacted: the fields themselves are untouched, so the caller still reads
 // .Token and encoding/json still serialises it.
+// TestEngineAndConfigRenderingsRedactPeppers covers the type that holds the KEY
+// material rather than the credential ([N-46]). fmt reaches unexported fields
+// by reflection, so before the String methods existed a single "%+v" on any
+// struct embedding an engine printed every configured pepper — and an engine is
+// long-lived application state, so the realistic trigger is a startup log or a
+// panic dump, whose audience is far wider than the database's.
+func TestEngineAndConfigRenderingsRedactPeppers(t *testing.T) {
+	engine, store, _ := makeEngine(t, nil)
+	cfg := Config{Peppers: map[string]string{"k1": testPepper}, ActiveKid: "k1", Store: store}
+
+	check := func(name, rendered string) {
+		t.Helper()
+		if strings.Contains(rendered, testPepper) {
+			t.Errorf("%s leaks the pepper: %s", name, rendered)
+		}
+		if !strings.Contains(rendered, "<redacted>") {
+			t.Errorf("%s is not redacted: %s", name, rendered)
+		}
+		// The kid NAMES must survive: they are on the wire in every token and
+		// are what makes a pepper-rotation problem legible.
+		if !strings.Contains(rendered, "k1") {
+			t.Errorf("%s lost the kid names: %s", name, rendered)
+		}
+	}
+
+	check("Engine %v", fmt.Sprintf("%v", engine))
+	check("Engine %+v", fmt.Sprintf("%+v", engine))
+	check("Engine %#v", fmt.Sprintf("%#v", engine))
+	check("Engine deref %+v", fmt.Sprintf("%+v", *engine))
+	check("Config %v", fmt.Sprintf("%v", cfg))
+	check("Config %+v", fmt.Sprintf("%+v", cfg))
+	check("Config %#v", fmt.Sprintf("%#v", cfg))
+}
+
 func TestDebugRenderingsRedactSecrets(t *testing.T) {
 	engine, _, _ := makeEngine(t, nil)
 	issued := mustIssue(t, engine, "u1", nil)
