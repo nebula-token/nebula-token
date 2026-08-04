@@ -39,9 +39,13 @@ document. No conforming behaviour changes for the other nine packages.
   *names* and redact the secrets, under `%v`, `%+v` and `%#v`.
 - `packages/php`: `#[\SensitiveParameter]` on the pepper map and on the token
   and device-identifier arguments, so an exception trace stops carrying them —
-  `zend.exception_ignore_args` is `0` in `php.ini-development`. The adjacent
-  `print_r`/`var_export` gap in `__debugInfo()` is now documented in place; it
-  needs the pepper map to stop being a plain property and is not closed here.
+  `zend.exception_ignore_args` is `0` in `php.ini-development`, and a
+  constructor failure otherwise put the whole map in every frame. Measured on
+  8.3, `__debugInfo()` already covers `var_dump()` **and** `print_r()`;
+  `var_export()` is the one residual path and is now documented in place and
+  pinned by a test, because the obvious workaround is worse than the gap — a
+  closure-held map makes `print_r()` and `var_dump()` start leaking, since both
+  expand a Closure's `[static]` bindings.
 - `packages/php/skills`: the `CONFLICT` sample instructed a server-side retry
   "with the same token". The winner has already rotated that token, so the
   retry is a replay and burns the family at the default grace of 0 — the exact

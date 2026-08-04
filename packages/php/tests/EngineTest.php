@@ -395,6 +395,37 @@ final class EngineTest extends TestCase
         self::assertStringContainsString('MALFORMED', $dump($failed), 'the error code stays visible');
     }
 
+    public function testPrintRIsCoveredByTheDebugHookAndVarExportIsTheDocumentedGap(): void
+    {
+        // Which debug calls __debugInfo() actually covers is a property of the
+        // runtime, not of this package, and getting it wrong in either
+        // direction is expensive: believing print_r() leaks invites a
+        // "hold it behind a closure" fix that makes print_r() and var_dump()
+        // BOTH start leaking, because they expand a Closure's [static]
+        // bindings — through a containing object too.
+        $engine = $this->makeEngine(new MemoryRefreshTokenStore());
+        $issued = $engine->issue('u1');
+
+        self::assertStringNotContainsString(self::PEPPER, print_r($engine, true), 'print_r must honour __debugInfo');
+        self::assertStringNotContainsString($issued->token, print_r($issued, true), 'print_r must honour __debugInfo');
+        self::assertStringContainsString('k1', print_r($engine, true), 'the kid is not secret and stays visible');
+
+        // json_encode is clean for a different reason on the engine — it
+        // serialises public properties and the engine has none — and NOT clean
+        // on a result, whose token is public by API contract. Go documents the
+        // same of encoding/json.
+        self::assertStringNotContainsString(self::PEPPER, (string) json_encode($engine));
+
+        // The documented residual. Asserted so that the day PHP grows a hook,
+        // or someone closes it, this test fails and the comment above
+        // NebulaEngine::__debugInfo() gets revisited rather than rotting.
+        self::assertStringContainsString(
+            self::PEPPER,
+            var_export($engine, true),
+            'var_export still expands every property; if this now passes, close the gap and update the docs',
+        );
+    }
+
     public function testTheMemoryStoreRevokeIfActiveIsACompareAndSet(): void
     {
         // [N-18]: revoke if and only if the row is still active, and report

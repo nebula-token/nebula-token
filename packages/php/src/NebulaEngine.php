@@ -145,15 +145,26 @@ final class NebulaEngine
      * any framework error page that walks an object graph. The pepper is the key
      * that protects every session of every user, so keep it out of all of them.
      *
-     * KNOWN GAP: this hook is consulted by `var_dump()` and by the debuggers
-     * built on it, but NOT by `print_r()` or `var_export()`, which walk the
-     * property table directly and print private properties regardless. PHP
-     * offers no hook for those two, so closing it means the pepper map must
-     * stop being a plain property. Until then, `print_r($engine, true)` into a
-     * log line still leaks; the `#[\SensitiveParameter]` attributes on the
-     * constructor and on the token/device arguments close the adjacent
-     * exception-trace channel, which `zend.exception_ignore_args=0` leaves open
-     * by default in php.ini-development.
+     * Measured on 8.3, this hook covers `var_dump()` AND `print_r()` — the two
+     * idiomatic debug calls and everything built on them. `json_encode()` is
+     * clean for a different reason: it serialises public properties only, and
+     * every property here is private.
+     *
+     * KNOWN GAP: `var_export()`. It ignores this hook and emits
+     * `\NebulaToken\NebulaEngine::__set_state(array(...))` with every property
+     * expanded, pepper included. PHP offers no hook to change that — `__set_state`
+     * runs on import, not on export — and the obvious workaround is worse than
+     * the gap: holding the map behind a closure makes `print_r()` and
+     * `var_dump()` start leaking, because both expand a Closure's `[static]`
+     * bindings, through a containing object too. So the map stays a plain
+     * property and `var_export()` on a live engine is documented as unsafe.
+     * Every port has one such residual path — Go says the same of
+     * `encoding/json` — and this is PHP's.
+     *
+     * The adjacent exception-trace channel IS closed: `zend.exception_ignore_args`
+     * is `0` in php.ini-development, so a constructor failure would otherwise
+     * carry the whole map, and `#[\SensitiveParameter]` replaces it with a
+     * `SensitiveParameterValue` in every frame.
      *
      * @return array<string, mixed>
      */
