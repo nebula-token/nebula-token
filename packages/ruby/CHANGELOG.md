@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- The engine tested the compare-and-set return value directly, and in Ruby `0`
+  is truthy. A store reporting the affected-row count — which `docs/STORE.md`
+  told adapters to return — made a **lost** compare-and-set read as applied, so
+  two concurrent refreshes each minted a successor and the family forked into
+  two independently valid lineages with reuse detection off for it ([N-17],
+  [N-18], [N-34] step 5). Counts are normalised now and anything outside the
+  contract fails closed as "not applied".
+- A device identifier was decided on the String's encoding tag rather than on
+  its bytes, so bytes that every other port accepts were refused when tagged
+  `ASCII-8BIT` — from `String#b`, `File.binread` or a socket read. In `refresh`
+  that is a sender-binding failure, so the whole family was revoked where the
+  other nine rotate normally ([N-11], [N-32]). [N-12]'s treatment of invalid
+  Unicode is unchanged.
+
 ## [1.0.1] - 2026-07-30
 
 Release automation only; no change to this package's behaviour, API or wire
@@ -25,4 +42,4 @@ workflow failed, and neither permits republishing a used version number.
   pepper rotation via `kid`.
 
 [1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
-[1.0.0]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.0
+[1.0.0]: https://github.com/nebula-token/nebula-token/commit/cb66b3dd897dc968bff8b211f001b94de7531b09

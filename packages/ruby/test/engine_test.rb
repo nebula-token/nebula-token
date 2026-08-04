@@ -287,6 +287,54 @@ class EngineTest < Minitest::Test
     assert_predicate engine.refresh(winners.first.token), :ok?
   end
 
+  # The same race, against a store that reports the affected-row count instead
+  # of a boolean — which is what `docs/STORE.md` §4 tells an adapter to derive
+  # its answer from, naming `cmd_tuples` on a `PG::Result` by hand. Ruby's only
+  # falsy values are `nil` and `false`, so a lost compare-and-set returning `0`
+  # reads as applied unless the engine normalises it ([N-17], [N-18]).
+  class CountingCasStore < RacingStore
+    def mark_rotated(selector, from_status, rotated_at, replaced_by_selector)
+      super ? 1 : 0
+    end
+
+    def revoke_if_active(selector)
+      super ? 1 : 0
+    end
+  end
+
+  def test_a_store_reporting_affected_row_counts_cannot_fork_a_family
+    racers = 8
+    store = CountingCasStore.new(racers)
+    engine, = make_engine(store: store)
+    token = engine.issue('u1').token
+
+    threads = Array.new(racers) { Thread.new { engine.refresh(token) } }
+    threads.each { |t| assert t.join(20), 'a concurrent refresh deadlocked' }
+    results = threads.map(&:value)
+
+    assert_equal 1, results.count(&:ok?),
+                 '0 is truthy in Ruby: a lost compare-and-set must not read as applied'
+    assert_equal [], results.reject(&:ok?).map(&:error).uniq - ['CONFLICT']
+
+    rows = store.inner.all
+    assert_equal 1, rows.count(&:active?), 'the family must not fork into two live lineages'
+    assert_equal 1, rows.count(&:rotated?)
+  end
+
+  def test_cas_applied_accepts_a_count_and_fails_closed_on_anything_else
+    assert NebulaToken.cas_applied?(true)
+    assert NebulaToken.cas_applied?(1)
+    assert NebulaToken.cas_applied?(2)
+
+    refute NebulaToken.cas_applied?(false)
+    refute NebulaToken.cas_applied?(0)
+    refute NebulaToken.cas_applied?(nil)
+    # Out of contract: a spurious CONFLICT revokes nothing and is retryable
+    # ([N-35]); a spurious success forks a family and cannot be undone.
+    refute NebulaToken.cas_applied?('1')
+    refute NebulaToken.cas_applied?(Object.new)
+  end
+
   # ── Store failures fail closed ([N-20]) ─────────────────────────────────────
 
   class StoreDown < StandardError; end
@@ -457,6 +505,24 @@ class EngineTest < Minitest::Test
     # the call site instead of minting a binding nothing can satisfy.
     assert_raises(NebulaToken::ConfigError) { engine.issue('u1', lone_surrogate) }
     assert_raises(NebulaToken::ConfigError) { engine.issue('u1', "\xFF".dup.force_encoding('UTF-8')) }
+  end
+
+  def test_a_binary_tagged_device_id_hashes_as_its_bytes_like_the_other_nine_ports
+    utf8 = 'dispositivo-cafè-日本語'
+    binary = utf8.b
+    assert_equal Encoding::BINARY, binary.encoding
+    assert_equal utf8.bytes, binary.bytes, 'the two differ only by their encoding tag'
+
+    # [N-11] keys the HMAC on the UTF-8 encoding of the identifier, and these
+    # are the same bytes. Deciding on the tag instead would refuse the binary
+    # one — and in refresh that is a sender-binding failure, so Ruby would
+    # revoke the family where the other nine rotate.
+    assert_equal NebulaToken.hash_device_id(PEPPER, utf8),
+                 NebulaToken.hash_device_id(PEPPER, binary)
+
+    engine, = make_engine
+    issued = engine.issue('u1', utf8)
+    assert_predicate engine.refresh(issued.token, binary), :ok?
   end
 
   def test_hash_device_id_applies_no_normalisation_trimming_or_case_folding

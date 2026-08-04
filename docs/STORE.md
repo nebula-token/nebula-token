@@ -80,13 +80,24 @@ Four details that adapters get wrong:
 adapter that hard-codes `AND status = 'active'` silently turns every grace retry
 into a `CONFLICT`.
 
-**Return the affected-row count, not a success flag.** Every driver exposes it:
-`rowCount` in node-postgres, `cursor.rowcount` in DB-API, `RowsAffected()` on
-Go's `sql.Result`, `PreparedStatement.executeUpdate()` in JDBC,
-`PDOStatement::rowCount()`, `ExecuteNonQueryAsync` in ADO.NET, `num_rows` on
-`Postgrex.Result`, `cmd_tuples` on Ruby's `PG::Result`. If your driver cannot
-report it, use `UPDATE … RETURNING selector` (or the engine's equivalent) and
-count the rows you got back.
+**Derive the answer from the affected-row count, not from whether the statement
+ran.** Every driver exposes the count: `rowCount` in node-postgres,
+`cursor.rowcount` in DB-API, `RowsAffected()` on Go's `sql.Result`,
+`PreparedStatement.executeUpdate()` in JDBC, `PDOStatement::rowCount()`,
+`ExecuteNonQueryAsync` in ADO.NET, `num_rows` on `Postgrex.Result`,
+`cmd_tuples` on Ruby's `PG::Result`. If your driver cannot report it, use
+`UPDATE … RETURNING selector` (or the engine's equivalent) and count the rows
+you got back.
+
+**Then return a boolean, not the count itself.** [N-17] and [N-18] define these
+two methods as returning whether the write applied, and `count == 1` is that
+answer — `res.cmd_tuples == 1`, `cur.rowcount == 1`. Returning the bare count
+is a portability trap rather than a shortcut: in a language where `0` is truthy
+— Ruby is the one among the ten — a lost compare-and-set then reads as a win,
+both concurrent refreshes mint a successor, and the family forks into two
+independently valid lineages with reuse detection silently off for it. That is
+the exact failure [N-17] exists to close. The shipped adapters get this right
+(`examples/pg_store.rb`, `examples/sqlite_store.py`); copy their shape.
 
 **The `AND status <> 'revoked'` guard on the two bulk revocations is what makes
 the count portable.** [N-19] asks for the number of records *changed*. PostgreSQL

@@ -138,11 +138,26 @@ module NebulaToken
   # failure on the attacker-reachable path, a caller error at issue ([N-12]).
   # Deriving a hash from a replacement character instead would make the same
   # identifier hash differently across languages.
+  # A binary-tagged String is bytes, not text, and is decided on the BYTES for
+  # the same reason pepper_bytes is: the identical identifier reaches Ruby
+  # tagged UTF-8 from JSON and ASCII-8BIT from String#b, File.binread or a
+  # socket read, and ASCII-8BIT -> UTF-8 transcoding raises for every byte above
+  # 0x7F. Transcoding it would refuse an identifier the other nine ports accept
+  # — and in `refresh` that refusal is a sender-binding failure, so it would
+  # revoke the whole family where the other nine rotate normally. A String that
+  # carries a real text encoding still transcodes, so its UTF-8 encoding is the
+  # one [N-11] names.
   def utf8_bytes(value)
     return nil unless value.is_a?(String)
 
-    utf8 = value.encoding == Encoding::UTF_8 ? value : value.encode(Encoding::UTF_8)
-    utf8.valid_encoding? ? utf8.b : nil
+    utf8 =
+      if value.encoding == Encoding::UTF_8 || value.encoding == Encoding::BINARY
+        value
+      else
+        value.encode(Encoding::UTF_8)
+      end
+    bytes = utf8.b
+    bytes.dup.force_encoding(Encoding::UTF_8).valid_encoding? ? bytes : nil
   rescue EncodingError
     nil
   end
@@ -273,6 +288,30 @@ module NebulaToken
     return value if STATUSES.include?(value)
 
     STATUS_BY_NAME.fetch(value.to_s, STATUS_REVOKED)
+  end
+
+  # Did a compare-and-set apply? ([N-17], [N-18])
+  #
+  # The store contract returns a boolean, but `docs/STORE.md` §4 also tells an
+  # adapter to derive it from the affected-row count its driver reports —
+  # `cmd_tuples` on a `PG::Result`, `affected_rows` on Mysql2 — and in Ruby `0`
+  # is truthy. A bare `unless @store.mark_rotated(...)` therefore reads a LOST
+  # compare-and-set as applied: two concurrent refreshes each mint a successor,
+  # the family forks into two independently valid lineages, and no later
+  # presentation of either is a replay. Reuse detection is not weakened for that
+  # family, it is switched off — which is the entire failure [N-17] exists to
+  # close. Ruby is the only one of the ten ports where a count can read as
+  # success, so this is a Ruby-side guard, not a change of contract.
+  #
+  # Anything outside the contract fails closed as "not applied": a spurious
+  # CONFLICT revokes nothing and is retryable ([N-35]), a spurious success is
+  # unrecoverable.
+  def cas_applied?(value)
+    case value
+    when true, false then value
+    when Integer then value.positive?
+    else false
+    end
   end
 
   # ── Server-side record (§3) ────────────────────────────────────────────────
@@ -787,7 +826,7 @@ module NebulaToken
 
           # Compare-and-set: exactly one concurrent retry may consume the unused
           # successor. The loser rotates nothing and reports CONFLICT ([N-30] 2).
-          unless @store.revoke_if_active(successor.selector)
+          unless NebulaToken.cas_applied?(@store.revoke_if_active(successor.selector))
             return RefreshResult.failure(ErrorCode::CONFLICT, record)
           end
 
@@ -816,7 +855,8 @@ module NebulaToken
                               device_hash, record.family_expires_at, now)
       @store.insert(successor)
 
-      unless @store.mark_rotated(record.selector, from_status, rotated_at, successor.selector)
+      unless NebulaToken.cas_applied?(@store.mark_rotated(record.selector, from_status,
+                                                          rotated_at, successor.selector))
         # [N-34] step 5: a concurrent refresh won the compare-and-set. Clean up
         # the successor we inserted and report a retryable conflict — never a
         # token. Without the CAS both refreshes would mint a successor and the
