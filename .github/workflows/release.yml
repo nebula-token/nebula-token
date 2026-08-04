@@ -128,12 +128,12 @@ jobs:
         with:
           node-version: "22"
 
-      # `gates` in ci.yml runs `npm ci` first; this job does not, and works only
-      # because version.mjs, check-skills.mjs and check-marketplace.mjs happen to
+      # `npm ci` runs first and must stay. Without it this job would depend on
+      # version.mjs, check-skills.mjs and check-marketplace.mjs continuing to
       # import nothing outside node:*. That is not true of every script in
-      # scripts/ — validate-vectors.mjs needs ajv — and nothing asserts it. One
-      # schema check added to check-skills.mjs would fail the release here, after
-      # ten registries have published.
+      # scripts/ — validate-vectors.mjs needs ajv — and nothing asserts it, so
+      # one schema check added to check-skills.mjs would otherwise fail the
+      # release here, after ten registries have published.
       - run: npm ci
         working-directory: scripts
       - name: Every manifest must already carry this version
@@ -233,8 +233,9 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      # Same reason as preflight: these two gates import only node:* today, and
-      # nothing asserts that they always will.
+      # Same reason as preflight: these two gates import only node:* today,
+      # nothing asserts that they always will, and `npm ci` costs less than
+      # discovering otherwise after ten registries have published.
       - run: npm ci
         working-directory: scripts
       - name: The skills must be shipped, complete and correctly named
@@ -712,8 +713,11 @@ jobs:
           echo "credential present"
       - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
+          # The floor PAIR from .github/runtime-matrix.json. Publishing on a
+          # combination the conformance suite never runs would make registry 7
+          # of 10 the first place it is exercised.
           elixir-version: "1.18"
-          otp-version: "27"
+          otp-version: "25"
       - run: mix deps.get
       # `mix hex.publish` publishes the package AND the documentation, and the
       # documentation half runs `mix docs`, which needs ex_doc. mix.exs has no

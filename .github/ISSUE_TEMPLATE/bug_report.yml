@@ -36,7 +36,7 @@ body:
     attributes:
       label: Package version and SPEC_VERSION
       description: The package version, the `SPEC_VERSION` it reports, and the runtime version.
-      placeholder: "nebula-token 1.0.0, SPEC_VERSION 1, Python 3.12.4"
+      placeholder: "nebula-token 1.0.1, SPEC_VERSION 1, Python 3.12.4"
     validations:
       required: true
 

@@ -12,9 +12,13 @@ where `nebula-token` means different things in different languages.
 ## The version surface
 
 `scripts/version.mjs` is the single tool that reads and writes versions. It knows
-about all the places a version appears, because there are ten of them — eight
-package manifests plus the Maven `<scm><tag>` that Central serves verbatim and
-`sonar.projectVersion` — and a human will miss one:
+about all the places a version appears, because there are sixteen of them —
+eight package manifests, the Maven `<scm><tag>` that Central serves verbatim,
+`sonar.projectVersion`, both root entries of the TypeScript lockfile, and the
+four install snippets that ship inside a published artefact — and a human will
+miss one. The last five were each missed once: the lockfile drifted to a
+released tag unnoticed, and the four snippets had to be corrected by hand in
+1.0.1 after Maven Central and the Go proxy never received 1.0.0.
 
 | File | Field |
 |---|---|
@@ -28,11 +32,15 @@ package manifests plus the Maven `<scm><tag>` that Central serves verbatim and
 | `packages/elixir/mix.exs` | `version` |
 | `packages/java/pom.xml` | `project.scm.tag` — Central serves it verbatim |
 | `sonar-project.properties` | `sonar.projectVersion` |
+| `packages/typescript/package-lock.json` | `version` and `packages."".version` — npm validates neither against `package.json` |
+| `packages/java/README.md` | the Maven `<version>` and Gradle install snippets — they ship in the jar as `META-INF/README.md` |
+| `packages/java/skills/nebula-token-java/SKILL.md` | the install coordinate — ships in the jar |
+| `packages/go/README.md` | the `go get …@vX.Y.Z` snippet — ships in the module zip |
 | `packages/go/go.mod` | none — Go reads the git tag |
 | `composer.json` (repository root) | none — Packagist reads the git tag |
 
 ```bash
-node scripts/version.mjs check     # assert all ten agree; used as a CI gate
+node scripts/version.mjs check     # assert all sixteen agree; used as a CI gate
 node scripts/version.mjs set 1.2.0 # write all ten
 ```
 
@@ -222,7 +230,8 @@ nothing after it can. Going public is also when the first block of
    derivable from its number.
 
 3. **Bump.** `node scripts/version.mjs set X.Y.Z`, then commit as
-   `release: X.Y.Z`.
+   `chore(release): X.Y.Z` — `release:` is not a Conventional Commits type, and
+   `AGENTS.md` governs the commit style.
 
 4. **Tag.** A release carries **two tags on this repository**, and only the first
    is pushed by hand:
@@ -391,9 +400,13 @@ rather than TODO markers in the files that will carry them:
 
    | Block | Expires when | What it masks **today** |
    |---|---|---|
-   | the two release URLs | this release exists — `github-release` creates both | the skills archive and the `## [1.0.0]` link target in seven changelogs |
+   | ~~the two release URLs~~ | **gone** — retired after 1.0.1 shipped | it masked the `## [1.0.0]` link target, which had 404ed since the v1.0.0 tag was withdrawn; the heading now links to its commit |
    | ~~`nebulatoken.dev.*`~~ | **gone** — the site went live 2026-07-29 | it never masked anything the `links` job looks at; see below |
-   | the ten registry pages | this release publishes | nothing yet; they appear only as `environment.url` in `release.yml` |
+   | ~~the nine registry pages~~ | **gone** — retired after 1.0.1 reached all ten registries | nothing; they were pre-emptive and never appeared in a markdown file |
+
+   All three temporary blocks are now retired. Anything added here in future
+   carries the same obligation: delete it in the first pull request after its
+   trigger fires, and say in this table what it masks while it stands.
 
    A fourth block, a blanket `github.com/nebula-token/.*`, was retired on
    2026-07-29 when the repository went public. It is worth saying what replaced

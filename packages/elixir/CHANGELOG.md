@@ -25,4 +25,4 @@ workflow failed, and neither permits republishing a used version number.
   pepper rotation via `kid`.
 
 [1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
-[1.0.0]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.0
+[1.0.0]: https://github.com/nebula-token/nebula-token/commit/cb66b3dd897dc968bff8b211f001b94de7531b09

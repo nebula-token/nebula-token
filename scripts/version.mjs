@@ -121,6 +121,56 @@ const VERSIONED = [
     field: "sonar.projectVersion",
     ...sub(/^(sonar\.projectVersion=)(\S+)(\s*)$/m),
   },
+  {
+    id: "typescript-lock",
+    file: "packages/typescript/package-lock.json",
+    field: "version",
+    // npm keeps the root version in TWO places and validates NEITHER against
+    // package.json: `npm ci` compares dependency trees only, so a stale value
+    // here is silent until an unrelated `npm install` rewrites it as a stray
+    // diff. It reached a released tag exactly that way. The lockfile is not
+    // published, but the SBOM job catalogues the whole tree, so a stale entry
+    // can be attested. Anchored on the two-space indent, which only the
+    // top-level key has.
+    ...sub(/^(  "version": ")([^"]+)(",)$/m),
+  },
+  {
+    id: "typescript-lock-root",
+    file: "packages/typescript/package-lock.json",
+    field: 'packages."".version',
+    // The `""` root entry. Anchored through the empty package key, because
+    // `"name": "nebula-token"` alone also matches the top-level pair above.
+    ...sub(/("": \{\s*\n\s*"name": "nebula-token",\s*\n\s*"version": ")([^"]+)(")/),
+  },
+  {
+    id: "java-readme-maven",
+    file: "packages/java/README.md",
+    field: "Maven install snippet",
+    // These four SHIP: the Java README and skill land in the jar as
+    // META-INF/, and the Go README in the module zip. Maven Central and the Go
+    // proxy never received 1.0.0, so a stale coordinate here resolves to
+    // nothing at all — which is exactly what 1.0.1 had to fix BY HAND. Held
+    // here so the next bump cannot repeat it.
+    ...sub(/(<version>)([^<]+)(<\/version>)/),
+  },
+  {
+    id: "java-readme-gradle",
+    file: "packages/java/README.md",
+    field: "Gradle install snippet",
+    ...sub(/(implementation 'dev\.nebulatoken:nebula-token:)([^']+)(')/),
+  },
+  {
+    id: "java-skill",
+    file: "packages/java/skills/nebula-token-java/SKILL.md",
+    field: "install coordinate",
+    ...sub(/(Maven\/Gradle: dev\.nebulatoken:nebula-token:)(\S+)(\s*)$/m),
+  },
+  {
+    id: "go-readme",
+    file: "packages/go/README.md",
+    field: "go get snippet",
+    ...sub(/(`go get …@v)([^`]+)(` resolves)/),
+  },
 ];
 
 

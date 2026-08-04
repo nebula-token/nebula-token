@@ -13,39 +13,20 @@
 # home and the ONLY repository, so those are the most load-bearing links here and
 # they should not be exempt from anything.
 #
-# Exactly two survive, and only because they name a GitHub *release* rather than
-# a path in the tree:
-#
-#   * the skills archive, attached by the `github-release` job (RELEASING.md
-#     step 7) and documented by skills/README.md as the air-gapped install route;
-#   * the `## [1.0.0]` link target in the root changelog and the six per-package
-#     ones — Keep a Changelog puts the version in brackets precisely because it
-#     is a link to the release, and the release is what does not exist yet.
-#
-# REMOVE BOTH the moment the 1.0.0 release exists. They are the last two rows of
-# this file that a release can retire.
+# Both entries that once sat here have been retired, as this block said they
+# must be. 1.0.1 shipped, so the skills archive and every `releases/tag/v*` URL
+# resolve and are now checked for real. The `## [1.0.0]` heading links to its
+# commit rather than to a release, because the v1.0.0 tag was withdrawn during
+# the 1.0.1 transition — a commit URL is the honest target and needs no
+# exemption.
 # ---------------------------------------------------------------------------
-https://github.com/nebula-token/nebula-token/releases/latest/download/nebula-token-skills.zip
-https://github.com/nebula-token/nebula-token/releases/tag/v.*
 
 # ---------------------------------------------------------------------------
-# Registry pages for packages that have not been published.
-#
-# Same shape as the block above: pre-emptive rather than coverage. NINE URLs, not
-# ten — npm's is permanent and lives with the hostile hosts above. None of these
-# appears in a markdown file yet — they exist only as `environment.url`
-# in release.yml, which lychee does not read. They become real, and reachable,
-# when the install instructions in the READMEs start linking them after 1.0.0.
+# Registry pages. The nine pre-emptive exemptions that sat here are gone: all
+# ten registries carry 1.0.1, so every registry URL is reachable and is checked
+# for real. Re-adding one would hide exactly the failure this project already
+# had — Maven Central and the Go proxy silently carrying nothing.
 # ---------------------------------------------------------------------------
-https://pypi.org/project/nebula-token.*
-https://crates.io/crates/nebula-token
-https://central.sonatype.com/artifact/dev.nebulatoken/.*
-https://www.nuget.org/packages/NebulaToken
-https://rubygems.org/gems/nebula-token
-https://hex.pm/packages/nebula_token
-https://pub.dev/packages/nebula_token
-https://packagist.org/packages/nebula-token/.*
-https://pkg.go.dev/github.com/nebula-token/.*
 
 # ---------------------------------------------------------------------------
 # Hosts that refuse automated requests.

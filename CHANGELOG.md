@@ -4,6 +4,82 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+`SPECIFICATION.md` and both vector files are unchanged: every entry below either
+brings one implementation back into line with the other nine, or corrects a
+document. No conforming behaviour changes for the other nine packages.
+
+### Fixed
+- `packages/ruby`: the engine tested the compare-and-set return value directly,
+  and in Ruby `0` is truthy. A store that reports the affected-row count — which
+  `docs/STORE.md` §4 told adapters to return, naming `cmd_tuples` on a
+  `PG::Result` by hand — made a **lost** compare-and-set read as applied: two
+  concurrent refreshes each minted a successor and the family forked into two
+  independently valid lineages, with reuse detection silently off for it. That
+  is the failure [N-17] exists to close. Counts are now normalised, anything
+  outside the contract fails closed as "not applied", and `docs/STORE.md` now
+  says to derive a boolean from the count rather than to return the count. The
+  other nine ports are unaffected: seven are statically typed to `bool`, `0` is
+  falsy in Python, and Elixir raises on a non-boolean. A portable vector cannot
+  express "a store returned the wrong type", so the regression lives in
+  `packages/ruby/test/engine_test.rb`.
+- `packages/ruby`: a device identifier was accepted or refused on the String's
+  **encoding tag** rather than on its bytes, so the same bytes that every other
+  port accepts were refused when tagged `ASCII-8BIT` — as they arrive from
+  `String#b`, `File.binread` or a socket read. In `refresh` that refusal is a
+  sender-binding failure, so Ruby revoked the family where the other nine
+  rotated normally. Binary-tagged strings are now decided on the bytes, exactly
+  as `pepper_bytes` already did; [N-12]'s treatment of invalid Unicode is
+  unchanged. A vector could express this and does not yet — see the proposal in
+  the pull request.
+- `packages/go`: `Engine` and `Config` had no `String`, and `fmt` reads
+  unexported fields by reflection, so a single `%+v` on any struct embedding an
+  engine printed every configured pepper ([N-46]). Both now render the kid
+  *names* and redact the secrets, under `%v`, `%+v` and `%#v`.
+- `packages/php`: `#[\SensitiveParameter]` on the pepper map and on the token
+  and device-identifier arguments, so an exception trace stops carrying them —
+  `zend.exception_ignore_args` is `0` in `php.ini-development`. The adjacent
+  `print_r`/`var_export` gap in `__debugInfo()` is now documented in place; it
+  needs the pepper map to stop being a plain property and is not closed here.
+- `packages/php/skills`: the `CONFLICT` sample instructed a server-side retry
+  "with the same token". The winner has already rotated that token, so the
+  retry is a replay and burns the family at the default grace of 0 — the exact
+  thing `docs/INTEGRATION.md` warns against. [N-35]'s retry is the *client's*.
+- `packages/python/examples/sqlite_store.py`: `sqlite3` defaults to
+  `isolation_level = ''`, which opens an implicit transaction and never commits.
+  Used without the optional `tx()` wrapper the example handed back a live token
+  for a row no other connection could see and that was rolled back on close, and
+  reported revocations that never landed ([N-20]). The connection is now in
+  autocommit mode; `tx()` still groups a refresh for [N-22].
+- `packages/typescript/package-lock.json` carried `1.0.0` in both root entries.
+  `npm ci` validates neither against `package.json`, so nothing reported it.
+- Seven changelogs linked `## [1.0.0]` at a release tag that was withdrawn during
+  the 1.0.1 transition and has returned 404 ever since; `.lycheeignore` was
+  masking it. They link the commit now, and all three expired ignore blocks —
+  the two release URLs and the nine registry pages — are pruned.
+
+### Changed
+- `scripts/version.mjs` covers six more sites: both root entries of the
+  TypeScript lockfile and the four install snippets that ship inside a published
+  artefact (the Java README's Maven and Gradle coordinates, the Java skill, the
+  Go README). Those four had to be corrected by hand for 1.0.1 and nothing
+  stopped them recurring. Sixteen sites now, not ten.
+- `docs/THREAT_MODEL.md` T3 described forgery given a record as "a second
+  preimage under HMAC-SHA-256". The reduction is to pepper secrecy — existential
+  forgery against a MAC under an unknown key — as the paper states.
+- `CONTRIBUTING.md` "Adding an implementation" gains steps 11–14. Following the
+  previous ten produced a tree that fails `npm run check`: three gates enumerate
+  `packages/` themselves, and a new manifest was invisible to the version gate.
+- `docs/paper/nebula.tex`: corrected the attribution of the selector/verifier
+  split (Jaspan argues theft detection, not timing; the split-token rationale is
+  Paragon Initiative's, now cited), the claim that RFC 9700 requires revoking a
+  token lineage (it requires revoking the active token; family revocation is
+  NEBULA's own strengthening), "compare-and-set on every state transition" (two
+  of six), and the claim that [N-3] and [N-38] are asserted by every conformance
+  runner (they are exercised by the behavioural suite; [N-4] is the one the
+  conformance runners assert). Five smaller precision fixes.
+
 ## [1.0.1] - 2026-07-30
 
 Release automation only. `SPECIFICATION.md`, both vector files and all ten
@@ -48,4 +124,4 @@ implementations are byte-identical to `1.0.0`.
   pepper rotation via `kid`.
 
 [1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
-[1.0.0]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.0
+[1.0.0]: https://github.com/nebula-token/nebula-token/commit/cb66b3dd897dc968bff8b211f001b94de7531b09
