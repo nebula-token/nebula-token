@@ -14,7 +14,7 @@ The package is named `nebulatoken`, not `nebula`: the short name collides with [
 import nebulatoken "github.com/nebula-token/nebula-token/packages/go"
 ```
 
-This is a Go **submodule** of the NEBULA monorepo, so its versions are the directory-prefixed tags `packages/go/vX.Y.Z`; `go get …@v1.0.1` resolves against those, and a bare `v1.0.1` tag is not a version of this module ([`VERSIONING.md`](../../VERSIONING.md) §5).
+This is a Go **submodule** of the NEBULA monorepo, so its versions are the directory-prefixed tags `packages/go/vX.Y.Z`; `go get …@v1.0.2` resolves against those, and a bare `v1.0.1` tag is not a version of this module ([`VERSIONING.md`](../../VERSIONING.md) §5).
 
 ```go
 import (

@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.2] - 2026-08-04
 
 ### Fixed
 - The engine tested the compare-and-set return value directly, and in Ruby `0`
@@ -44,5 +44,6 @@ workflow failed, and neither permits republishing a used version number.
   window, family revocation, sender (device) binding, dual expiry clocks,
   pepper rotation via `kid`.
 
+[1.0.2]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.2
 [1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
 [1.0.0]: https://github.com/nebula-token/nebula-token/commit/cb66b3dd897dc968bff8b211f001b94de7531b09

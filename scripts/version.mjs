@@ -171,6 +171,16 @@ const VERSIONED = [
     field: "go get snippet",
     ...sub(/(`go get …@v)([^`]+)(` resolves)/),
   },
+  {
+    id: "citation",
+    file: "CITATION.cff",
+    field: "version",
+    // DATED already reads this pair to check that the release date names the
+    // release; listing it here as well means `set` WRITES it, so the version a
+    // citing tool records cannot be the one nobody remembered to bump. Anchored
+    // to the line start, which `cff-version:` on line 1 does not match.
+    ...sub(/^(version: )(\S+)(\s*)$/m),
+  },
 ];
 
 

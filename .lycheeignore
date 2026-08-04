@@ -22,6 +22,20 @@
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# ONE URL, for as long as it takes to push the tag.
+#
+# `CHANGELOG.md` and the six per-package ones carry a `[1.0.2]:` link reference
+# to the release the tag is about to create. It cannot resolve while the release
+# is being prepared, and lychee runs on the pull request that prepares it. This
+# is an exact URL and not a pattern, so it masks exactly one link and cannot
+# grow to cover the next one silently.
+#
+# DELETE THIS ENTRY once v1.0.2 is released — it is step 5 of "After the tag" in
+# RELEASING.md, and the 1.0.0 link rotted for want of exactly that step.
+# ---------------------------------------------------------------------------
+https://github.com/nebula-token/nebula-token/releases/tag/v1.0.2
+
+# ---------------------------------------------------------------------------
 # Registry pages. The nine pre-emptive exemptions that sat here are gone: all
 # ten registries carry 1.0.1, so every registry URL is reachable and is checked
 # for real. Re-adding one would hide exactly the failure this project already

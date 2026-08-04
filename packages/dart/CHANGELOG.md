@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.2] - 2026-08-04
+
+No change to this package's behaviour, API or wire format. It is republished so
+that all ten packages carry one version, as `VERSIONING.md` section 2 requires.
+
+### Fixed
+- `example/README.md` printed a live rotated token to stdout — on the snippet
+  pub.dev renders as the Example tab, and therefore the one adopters copy
+  ([N-14], [N-46]). It prints the generation instead.
+
+### Changed
+- The conformance runner executes the two new `device_hashing` cases (erratum
+  E-1), including `dh-09`, whose supplementary-plane character is a surrogate
+  pair in a Dart `String`.
+
 ## [1.0.1] - 2026-07-30
 
 Release automation only; no change to this package's behaviour, API or wire
@@ -24,5 +39,6 @@ workflow failed, and neither permits republishing a used version number.
   window, family revocation, sender (device) binding, dual expiry clocks,
   pepper rotation via `kid`.
 
+[1.0.2]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.2
 [1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
 [1.0.0]: https://github.com/nebula-token/nebula-token/commit/cb66b3dd897dc968bff8b211f001b94de7531b09

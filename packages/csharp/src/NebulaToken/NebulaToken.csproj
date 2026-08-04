@@ -27,7 +27,7 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
 
     <PackageId>NebulaToken</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Matteo Teodori</Authors>
     <Description>Opaque rotating refresh tokens (RFC 9700 model): rotation, reuse detection, family revocation, sender binding.</Description>
     <!-- A single SPDX identifier. PackageLicenseExpression is the only form

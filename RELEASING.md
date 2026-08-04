@@ -12,11 +12,11 @@ where `nebula-token` means different things in different languages.
 ## The version surface
 
 `scripts/version.mjs` is the single tool that reads and writes versions. It knows
-about all the places a version appears, because there are sixteen of them —
+about all the places a version appears, because there are seventeen of them —
 eight package manifests, the Maven `<scm><tag>` that Central serves verbatim,
-`sonar.projectVersion`, both root entries of the TypeScript lockfile, and the
-four install snippets that ship inside a published artefact — and a human will
-miss one. The last five were each missed once: the lockfile drifted to a
+`sonar.projectVersion`, `CITATION.cff`, both root entries of the TypeScript
+lockfile, and the four install snippets that ship inside a published artefact — and a human will
+miss one. The last six were each missed once: the lockfile drifted to a
 released tag unnoticed, and the four snippets had to be corrected by hand in
 1.0.1 after Maven Central and the Go proxy never received 1.0.0.
 
@@ -32,6 +32,7 @@ released tag unnoticed, and the four snippets had to be corrected by hand in
 | `packages/elixir/mix.exs` | `version` |
 | `packages/java/pom.xml` | `project.scm.tag` — Central serves it verbatim |
 | `sonar-project.properties` | `sonar.projectVersion` |
+| `CITATION.cff` | `version` — also a dated site, so the pair is checked as well as written |
 | `packages/typescript/package-lock.json` | `version` and `packages."".version` — npm validates neither against `package.json` |
 | `packages/java/README.md` | the Maven `<version>` and Gradle install snippets — they ship in the jar as `META-INF/README.md` |
 | `packages/java/skills/nebula-token-java/SKILL.md` | the install coordinate — ships in the jar |
@@ -40,7 +41,7 @@ released tag unnoticed, and the four snippets had to be corrected by hand in
 | `composer.json` (repository root) | none — Packagist reads the git tag |
 
 ```bash
-node scripts/version.mjs check     # assert all sixteen agree; used as a CI gate
+node scripts/version.mjs check     # assert all seventeen agree; used as a CI gate
 node scripts/version.mjs set 1.2.0 # write all ten
 ```
 
@@ -392,8 +393,16 @@ rather than TODO markers in the files that will carry them:
    `CITATION.cff` pointing at the preprint, so citing tools prefer the paper
    over the software record. Not before it is posted: a preferred-citation
    pointing at nothing makes every citing tool emit a dead reference.
-3. **Prune [`.lycheeignore`](.lycheeignore).** Three of its blocks are temporary
-   and each expires at a different moment. They cover the most load-bearing links
+3. **Delete the release-URL exemption from [`.lycheeignore`](.lycheeignore).**
+   Step 2 of "Cutting a release" writes a `[X.Y.Z]:` link reference to a GitHub
+   release that does not exist yet, and lychee runs on the pull request that
+   writes it. The exemption is one exact URL, added in that same pull request
+   and deleted in the first one after the tag — the moment it starts masking a
+   live link instead of an unborn one. The `## [1.0.0]` link rotted to a 404 for
+   want of exactly this step, behind a `releases/tag/v.*` pattern that never
+   expired.
+4. **Prune the rest of [`.lycheeignore`](.lycheeignore).** Its temporary blocks
+   each expire at a different moment. They cover the most load-bearing links
    in the repository, and an ignore list nobody prunes is how a genuinely broken
    link hides — so each one is deleted in the first pull request after its
    trigger, not "eventually":

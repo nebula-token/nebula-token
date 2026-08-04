@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.2] - 2026-08-04
 
 `spec_version` remains **1** and no conforming behaviour changes. One erratum is
 published, and `spec/test-vectors.json` gains two cases for a rule that was
@@ -53,8 +53,8 @@ line with the other nine, or corrects a document.
   sender-binding failure, so Ruby revoked the family where the other nine
   rotated normally. Binary-tagged strings are now decided on the bytes, exactly
   as `pepper_bytes` already did; [N-12]'s treatment of invalid Unicode is
-  unchanged. A vector could express this and does not yet — see the proposal in
-  the pull request.
+  unchanged. Erratum E-1 above records the clarification to [N-11], and the
+  shared cases `dh-08`/`dh-09` now pin it for every implementation.
 - `packages/go`: `Engine` and `Config` had no `String`, and `fmt` reads
   unexported fields by reflection, so a single `%+v` on any struct embedding an
   engine printed every configured pepper ([N-46]). Both now render the kid
@@ -149,5 +149,6 @@ implementations are byte-identical to `1.0.0`.
   window, family revocation, sender (device) binding, dual expiry clocks,
   pepper rotation via `kid`.
 
+[1.0.2]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.2
 [1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
 [1.0.0]: https://github.com/nebula-token/nebula-token/commit/cb66b3dd897dc968bff8b211f001b94de7531b09
