@@ -25,7 +25,7 @@
 \title{NEBULA: A Language-Independent Specification for\\Opaque Rotating Refresh Tokens}
 \author{Matteo Teodori\\\small Independent researcher\\\small
   \href{mailto:hello@nebulatoken.dev}{hello@nebulatoken.dev}}
-\date{26 July 2026}
+\date{4 August 2026}
 
 \begin{document}
 \maketitle
@@ -47,8 +47,9 @@ precisely the corner cases that determine security outcomes.
 We present NEBULA, a precise, language-independent specification of the
 RFC~9700 refresh-token model, together with ten conformant reference
 implementations (TypeScript, Python, Go, Rust, Java, PHP, C\#, Ruby, Elixir,
-Dart). NEBULA tokens are opaque---256 bits of CSPRNG output with no claims,
-signatures, or structure---so token validity is a property of server-side
+Dart). NEBULA tokens are opaque---a 128-bit public selector and a 256-bit
+secret verifier, both CSPRNG output, carrying no claims and no
+signature---so token validity is a property of server-side
 state rather than of cryptographic verification. Its conformance methodology
 publishes the behavioural suite \emph{as data} rather than as prose: 38
 scenarios in one machine-readable file that every implementation executes
@@ -91,7 +92,11 @@ tokens for public clients either be sender-constrained (e.g., via
 DPoP~\cite{rfc9449} or mutual TLS~\cite{rfc8705}) or be \emph{rotated} on
 every use with \emph{replay detection}: if a previously-used refresh token is
 presented again, two parties demonstrably hold the same credential, and the
-authorization server must revoke the entire token lineage.
+authorization server revokes the active refresh token. NEBULA strengthens that
+last step to revocation of the entire rotation lineage (\S\ref{sec:reuse}); the
+BCP does not require it, and reserves its set-wide vocabulary for a different
+case, directing that an authorization server ``SHOULD revoke all tokens'' issued
+on a replayed authorization code.
 
 \paragraph{The specification gap.}
 RFC~9700 is deliberately a policy document. It does not define: a token
@@ -102,9 +107,9 @@ rotation response may retry; what state must be persisted, and for how long,
 for replay detection to function; what happens when two refreshes of one
 token execute concurrently; or how session lifetimes interact with rotation.
 Each implementer answers these questions independently. Managed identity
-providers implement rotation and reuse detection internally with proprietary
-and mutually divergent semantics; first-party implementations, which vastly
-outnumber them, answer from first principles.
+providers implement rotation and reuse detection internally, under semantics
+they are not obliged to publish or to share with one another; first-party
+implementations answer from first principles.
 
 We make no empirical claim here about how often that goes wrong, having no
 survey to support one. We observe instead that a document specifying
@@ -131,8 +136,8 @@ present specification forbids by an identified requirement:
 \begin{enumerate}[leftmargin=1.4em]
   \item \textbf{A precise specification} (Section~\ref{sec:spec}) of the
   rotation-with-reuse-detection model: an opaque token format with a
-  selector/verifier split, a six-method storage contract with
-  compare-and-set semantics on every state transition, a ten-step
+  selector/verifier split, a six-method storage contract whose two
+  transitions out of \textit{active} that can race are compare-and-set, a ten-step
   verification algorithm with fixed and observable ordering, bounded
   non-extendable retry semantics, normative record retention, authenticated
   revocation by token, and zero-downtime key rotation via key identifiers.
@@ -187,13 +192,19 @@ replay entirely at the cost of client-side key management. RFC~9700 treats
 sender-constraining and rotation-with-reuse-detection as alternative
 mitigations. NEBULA implements the latter and provides an application-level
 device-binding hook; cryptographic sender-constraining can be layered above
-it and is planned as an extension.
+it (\S\ref{sec:limitations}).
 
-\paragraph{Split lookup/proof credentials.} The selector/verifier
-decomposition used by NEBULA---a public database key alongside a
-hashed-at-rest secret---has long been recommended for persistent-login
-(``remember-me'') cookies to avoid timing side-channels on credential
-lookup~\cite{jaspan2006,owasp-session}. NEBULA adopts it normatively.
+\paragraph{Split lookup/proof credentials.} Separating a stable lookup key
+from a rotating proof value is long-standing practice for persistent-login
+(``remember-me'') cookies: Jaspan pairs a reused \emph{series} identifier with
+a single-use token so that a valid series presented with a stale token betrays
+a theft~\cite{jaspan2006} --- an early statement of the reuse-detection
+argument this paper develops in \S\ref{sec:reuse}, although the tokens there
+are stored in the clear. The refinement NEBULA adopts---treating the lookup key
+as public and storing only a keyed hash of the proof value, so that the secret
+half never enters the database query and cannot leak through its comparison
+timing---is the split-token construction of Paragon Initiative
+Enterprises~\cite{paragonie-split}. NEBULA adopts it normatively.
 
 \section{Threat Model}
 \label{sec:threat}
@@ -234,7 +245,9 @@ where \texttt{kid} identifies the server-side HMAC key (\emph{pepper}) used
 for at-rest hashing; \texttt{selector} is the base64url encoding
 (RFC~4648~\S5, unpadded~\cite{rfc4648}) of 16 CSPRNG bytes and serves as the
 public database key; and \texttt{verifier} is the base64url encoding of 32
-CSPRNG bytes and constitutes the secret. Tokens exceeding 512 bytes,
+CSPRNG bytes and constitutes the secret --- comfortably above the 64 bits of
+CSPRNG entropy OWASP requires of a session
+identifier~\cite{owasp-session}. Tokens exceeding 512 bytes,
 containing other than four non-empty dot-separated parts, or whose verifier
 fails to decode to exactly 32 bytes under \emph{canonical} encoding, are
 rejected before any database interaction [N-6]. The canonical-encoding
@@ -266,7 +279,7 @@ successor selector [N-10]. The two hashes are
 \end{equation*}
 both HMAC-SHA-256 rendered as lowercase hex, where $\mathit{pepper}_{kid}$
 is the pepper named by the \emph{record's} own kid and $d$ is the device
-identifier [N-11]. Raw verifiers and raw device identifiers are never
+identifier [N-11, N-13]. Raw verifiers and raw device identifiers are never
 persisted, logged, or included in any error value or debug representation
 [N-14].
 
@@ -313,9 +326,13 @@ family through the reuse path.
 \centering\small
 \caption{The ten refresh checks, in normative order [N-26]. The order is
 observable: it fixes which code is returned when several conditions hold at
-once, and is itself pinned by behavioural scenarios (\texttt{order-01} to
-\texttt{order-05}). Steps marked \ddag\ perform a compare-and-set whose
-failure is itself a protocol outcome (\S\ref{sec:cas}). A deployment is
+once, and is itself pinned by the five behavioural scenarios whose identifiers
+begin \texttt{order-01} to \texttt{order-05}. Steps marked \ddag\ perform a
+compare-and-set whose
+failure is itself a protocol outcome (\S\ref{sec:cas}). $^\dagger$At the
+default $g = 0$ step~5 always yields \texttt{REUSE\_DETECTED}; where a grace
+window is enabled the retry it admits can instead end in
+\texttt{DEVICE\_MISMATCH} or \texttt{CONFLICT} (\S\ref{sec:reuse}). A deployment is
 expected to collapse all of these to one generic response at the transport
 boundary and log the specific code server-side [N-42].}
 \label{tab:checks}
@@ -327,7 +344,7 @@ boundary and log the specific code server-side [N-42].}
 2 & Pepper exists for token \texttt{kid} & reject & \texttt{UNKNOWN\_KID} \\
 3 & Record exists for selector & reject & \texttt{NOT\_FOUND} \\
 4 & Constant-time verifier proof & reject; family untouched & \texttt{VERIFIER\_MISMATCH} \\
-5 & Status is not \textit{rotated} & revoke family, or grace retry & \texttt{REUSE\_DETECTED} \\
+5 & Status is not \textit{rotated} & revoke family, or grace retry & \texttt{REUSE\_DETECTED}$^\dagger$ \\
 6 & Status is not \textit{revoked} & reject & \texttt{REVOKED} \\
 7 & Family deadline not passed & revoke family & \texttt{EXPIRED\_ABSOLUTE} \\
 8 & Idle deadline not passed & revoke family & \texttt{EXPIRED\_IDLE} \\
@@ -343,7 +360,7 @@ boundary and log the specific code server-side [N-42].}
 The transition of the presented record from \textit{active} to
 \textit{rotated} is the one place in the design where reuse detection can be
 bypassed with no cryptographic failure whatsoever, and it is the change we
-consider most consequential since the first draft of this specification.
+consider most consequential since the earliest drafts of this specification.
 
 Suppose that transition is an unconditional write. Two concurrent refreshes
 of the same active token (T5) both execute step~3, both read status
@@ -354,8 +371,9 @@ valid lineages, each rooted at a record that believes itself the sole
 successor, and---this is the damaging part---no subsequent presentation of
 either lineage is a replay. Reuse detection is not weakened; it is switched
 off for that family, permanently and silently. The condition is reachable by
-an ordinary retrying client, and it was reproducible against the first
-version of this specification.
+an ordinary retrying client, and it was reproducible against an earlier,
+unpublished draft of this specification, in which the transition was an
+unconditional write.
 
 The store contract closes it by making the transition a compare-and-set
 [N-17]. The \texttt{markRotated} operation takes the expected
@@ -407,7 +425,7 @@ the store, and is only as strong as the store provides.
     \texttt{revokeIfActive(succ)}\,\ddag\ then\\
     \texttt{markRotated(rotated)}\,\ddag};
 
-  \draw[->, cas] (a) -- (v)
+  \draw[->] (a) -- (v)
     node[lb, midway, left=3mm] {\texttt{revokeIfActive}\,\ddag\\
       \texttt{revokeFamily}\\ \texttt{revokeUser}\\ expiry, device mismatch};
 
@@ -416,9 +434,11 @@ the store, and is only as strong as the store provides.
       \texttt{REUSE\_DETECTED},\\ whole family revoked\\
       (also \texttt{revokeFamily} / \texttt{revokeUser})};
 \end{tikzpicture}
-\caption{Record lifecycle. Edges marked \ddag\ are compare-and-set writes:
-they apply only if the record's current status matches the expected one, and
-they report whether they applied. A lost compare-and-set yields
+\caption{Record lifecycle. The operations marked \ddag\ are the two
+compare-and-set writes: they apply only if the record's current status matches
+the expected one, and they report whether they applied. The remaining
+transitions into \textit{revoked} are unconditional bulk writes. A lost
+compare-and-set yields
 \texttt{CONFLICT} and mints nothing (\S\ref{sec:cas}). \textit{revoked} is
 terminal, and every state is retained until the family's absolute deadline
 [N-15]---deleting \textit{rotated} records early is what disables reuse
@@ -564,8 +584,9 @@ highlight this because it is the failure mode a policy-level document is
 least likely to surface: it is invisible to any single-threaded test, it
 produces no error at the time it occurs, and its consequence---the absence
 of a future detection---is not observable at all until an attacker relies on
-it. Two behavioural scenarios (\texttt{conflict-01}, \texttt{conflict-02})
-drive both losing paths by forcing the compare-and-set to report failure, so
+it. Two behavioural scenarios---\texttt{conflict-01-lost-rotation-cas} and
+\texttt{conflict-02-lost-grace-cas}---drive both losing paths by forcing the
+compare-and-set to report failure, so
 an implementation that ignores the returned flag---minting a token, or
 leaving the orphan successor active---cannot pass conformance. What those
 scenarios pin is the engine's half of the contract: that it consults the
@@ -608,7 +629,7 @@ and we do not assert it as such. Recovering a pepper by search costs
 $2^{n/2}$ for a pepper of $n$ bits of entropy, not $2^{128}$ by default, so
 the margin holds only where the pepper carries close to 256 bits. That is
 precisely why [N-23] recommends that peppers be generated by a CSPRNG with
-approximately 256 bits of entropy and held in an environment variable,
+at least 256 bits of entropy and held in an environment variable,
 secret manager, or KMS, and why the specification describes its minimum
 pepper length as a floor against obvious misconfiguration rather than a
 sufficient condition. A deployment using a 32-character human-chosen
@@ -631,14 +652,15 @@ edge.
 \label{sec:conformance}
 
 The specification is implemented in ten languages---TypeScript, Python, Go,
-Rust, Java, PHP, C\#, Ruby, Elixir, and Dart---each as a single small module
+Rust, Java, PHP, C\#, Ruby, Elixir, and Dart---each as a single small package
 with an injectable clock, the six-method storage contract, and an in-memory
 reference store documented as unsuitable for production [N-21]. The Java
 package is plain JDK bytecode and is callable from any JVM language; we test
 it from Java only, and make no claim of tested Kotlin or Scala support.
 
 \paragraph{Dependencies, counted rather than asserted.} Eight of the ten
-packages carry no runtime dependency at all beyond the platform library:
+packages carry no runtime dependency at all beyond the platform library,
+taking their cryptographic primitives from
 \texttt{node:crypto} (TypeScript); \texttt{hmac}, \texttt{hashlib} and
 \texttt{secrets} (Python); \texttt{crypto/hmac}, \texttt{crypto/rand},
 \texttt{crypto/sha256} and \texttt{crypto/subtle} (Go);
@@ -649,10 +671,12 @@ packages carry no runtime dependency at all beyond the platform library:
 \texttt{securerandom} (Ruby); and Erlang's \texttt{:crypto} (Elixir). Two do
 not: Rust takes six crates (\texttt{hmac}, \texttt{sha2}, \texttt{base64},
 \texttt{hex}, \texttt{rand}, \texttt{subtle}) and Dart takes
-\texttt{package:crypto}, in both cases because the language ships no
-cryptographic primitives in its standard library. Test-only
-dependencies---JSON parsers for the shared vector files, and test
-frameworks---are excluded from that count, as they reach no consumer.
+\texttt{package:crypto}, in both cases because the language ships no keyed
+hash in its standard library---Dart does ship a CSPRNG, \texttt{Random.secure},
+which is what the port uses. Test-only and build-time
+dependencies---JSON parsers for the shared vector files, test frameworks, and
+a source-link generator in the C\# build---are excluded from that count, as
+none reaches a consumer.
 
 \paragraph{Conformance artefacts.} Conformance is defined operationally, by
 published artefacts rather than by prose (Table~\ref{tab:artifacts}).
@@ -724,18 +748,22 @@ Artefact & What it pins & Cases \\
 \paragraph{What this establishes, and what it does not.} It establishes that
 the ten implementations agree \emph{at the observation points the vectors
 define}: the byte-level output of both keyed hashes, the accept/reject
-boundary of the parser, and, per scenario, the returned outcome code, the
-returned generation, the family and expiry relations, and the resulting
-multiset of record statuses in the store. Agreement is enforced by those
+boundary of the parser, and---for each scenario, over whichever of them that
+scenario asserts---the returned outcome code, the returned generation, the
+family and expiry relations, and the resulting multiset of record statuses in
+the store. Agreement is enforced by those
 shared artefacts rather than by intention or by review. The published
 traceability map (Table~\ref{tab:artifacts}) covers all 53 requirements: 23
 are cited by a vector or a scenario, and the remaining 30---API shape,
 extensibility policy, documentation, logging and deployment obligations---are
 verified by review, which we publish as an honest label rather than suppress
 as a gap. Three of that thirty are a boundary case we name rather than round
-off: the constants block [N-4], clock injection [N-3] and the error-code set
-[N-38] are asserted by every per-language conformance runner, so they are
-executed without being cited by a vector.
+off: the constants block [N-4] is checked against the vectors' own
+\texttt{constants} section by every per-language conformance runner; clock
+injection [N-3] is what all 38 behavioural scenarios are driven through; and
+each of the ten codes of the error set [N-38] is the expected outcome of at
+least one scenario. All three are therefore executed without being cited by a
+vector.
 
 It does not establish behavioural indistinguishability in general. The
 vectors do not observe timing, memory behaviour, log output, or store call
@@ -751,6 +779,7 @@ specification collapses the gap---endemic to informal standards---between
 what the document says and what implementations do.
 
 \section{Limitations and Future Work}
+\label{sec:limitations}
 
 NEBULA's guarantees are argued, not machine-verified. Formal modelling of the
 rotation state machine and of its compare-and-set transitions---in
@@ -792,6 +821,10 @@ divergent layers of practical authentication.
 
 \bibitem{owasp-session} OWASP, \emph{Session Management Cheat Sheet}, OWASP
   Cheat Sheet Series. \url{https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html}
+
+\bibitem{paragonie-split} Paragon Initiative Enterprises, \emph{Split Tokens:
+  Token-Based Authentication Protocols without Side-Channels}, 2017.
+  \url{https://paragonie.com/blog/2017/02/split-tokens-token-based-authentication-protocols-without-side-channels}
 
 \bibitem{rfc6749} D.~Hardt (ed.), \emph{The OAuth 2.0 Authorization
 Framework}, RFC~6749, IETF, 2012.
