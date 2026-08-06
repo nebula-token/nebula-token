@@ -247,3 +247,47 @@ test('deleteExpired only removes records past the family deadline ([N-15])', asy
   assert.equal(store.all().length, 2);
   assert.equal(store.deleteExpired(1_700_000_100), 2);
 });
+
+/**
+ * The published entry points — packaging hygiene, in the file that holds each
+ * runtime's own.
+ *
+ * A CommonJS consumer could not load this package at all: `exports` declared
+ * only `import`, so Node refused at RESOLUTION with ERR_PACKAGE_PATH_NOT_EXPORTED
+ * before it ever considered the file's format. It never reached the point where
+ * `require(esm)` — supported since Node 22.12 — would have loaded it happily.
+ * A TypeScript backend built with `module: CommonJS`, which is most of them,
+ * therefore could not use NEBULA at all.
+ *
+ * WHAT THIS ASSERTS, and what it cannot: the shape of the manifest, which is
+ * where that defect lived. It cannot prove that resolution works — only an
+ * install of a packed tarball can, because the conditions are evaluated by the
+ * resolver against a real node_modules. That proof belongs to `npm pack` and is
+ * not something a unit test should fake.
+ *
+ * `dist/` is gitignored, so nothing here touches the filesystem: on a fresh
+ * clone the targets legitimately do not exist yet.
+ */
+test('the package is loadable from CommonJS as well as ESM', async () => {
+  const { readFileSync } = await import('node:fs');
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const entry = manifest.exports['.'];
+
+  assert.equal(
+    Object.keys(entry)[0],
+    'types',
+    'TypeScript resolves the FIRST matching condition, so "types" must come first or it is shadowed',
+  );
+  for (const condition of ['import', 'require']) {
+    assert.ok(entry[condition], `exports["."] has no "${condition}" condition`);
+  }
+  assert.equal(
+    entry.require,
+    entry.import,
+    'there is one build, and it is ESM. If a real CommonJS output is ever added, this equality is ' +
+      'the thing to break deliberately — a "require" pointing at an ESM file is only correct while ' +
+      'that is the only file there is.',
+  );
+  assert.equal(manifest.type, 'module', 'the single build is ESM; "type" is what tells Node so');
+  assert.equal(manifest.main, entry.import, '"main" is the fallback for resolvers that ignore exports');
+});
