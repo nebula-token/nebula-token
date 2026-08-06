@@ -144,7 +144,7 @@ in NEBULA, and all of them are gaps in a system that has *only* NEBULA.
 | Artefact | What it demonstrates |
 |---|---|
 | [`SPECIFICATION.md`](../SPECIFICATION.md) | The behaviour is specified, not emergent. Every requirement carries an id you can cite in a finding or a response. |
-| [`spec/test-vectors.json`](../spec/test-vectors.json), [`spec/behavior-vectors.json`](../spec/behavior-vectors.json) | 46 conformance cases and 38 normative behavioural scenarios, executed in CI against every implementation, with a runner that must assert the case counts and fail on an empty section ([N-47], [N-48]). |
+| [`spec/test-vectors.json`](../spec/test-vectors.json), [`spec/behavior-vectors.json`](../spec/behavior-vectors.json) | 48 conformance cases and 38 normative behavioural scenarios, executed in CI against every implementation, with a runner that must assert the case counts and fail on an empty section ([N-47], [N-48]). |
 | [`THREAT_MODEL.md`](THREAT_MODEL.md) | A threat table where every entry maps to requirement ids and to executable scenario ids — including the two entries that admit no vector can cover them. |
 | [`spec/traceability.json`](../spec/traceability.json) | The requirement-side view of the same coverage, generated from the vector files: which scenarios exercise each `[N-*]`, and which requirements are verified by review instead. An assessor asking "how do you know?" can be handed this file. |
 | [`SECURITY.md`](../SECURITY.md) | A disclosure policy with response times, and an explicit list of what the project has *not* done: no independent audit, no formal verification, no fuzzing beyond the vectors, no production track record. |

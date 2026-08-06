@@ -336,7 +336,7 @@ was true.
 **Verified by the repository's test suites, on every CI run:**
 
 - Engine behaviour against the 38 scenarios of
-  [`spec/behavior-vectors.json`](../spec/behavior-vectors.json) and the 46 cases
+  [`spec/behavior-vectors.json`](../spec/behavior-vectors.json) and the 48 cases
   of [`spec/test-vectors.json`](../spec/test-vectors.json), in every language.
   This includes both compare-and-set outcomes, driven deterministically by the
   runner's `failNextCas` operation.

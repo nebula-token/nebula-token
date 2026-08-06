@@ -88,7 +88,7 @@ pytest -q
 read the normative artifacts from `spec/` in the repository root, located by
 walking up from the test file:
 
-- `tests/test_conformance.py` — `spec/test-vectors.json` (46 cases)
+- `tests/test_conformance.py` — `spec/test-vectors.json` (48 cases)
 - `tests/test_behavior.py` + `tests/behavior_runner.py` — `spec/behavior-vectors.json` (38 scenarios)
 - `tests/test_engine.py` — what the vectors cannot express: the constant-time
   guard, concurrency, store failures, configuration, and secret hygiene
