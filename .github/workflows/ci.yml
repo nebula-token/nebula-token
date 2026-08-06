@@ -206,7 +206,7 @@ jobs:
         working-directory: packages/rust
         run: cargo fmt --all --check
 
-      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
         with:
           sdk: stable
       # `dart format` is not self-contained: it reads analysis_options.yaml for a
@@ -607,7 +607,7 @@ jobs:
         working-directory: packages/dart
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1.7.2
+      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1 # v1.8.0
         with:
           sdk: ${{ matrix.dart }}
       - run: dart pub get
