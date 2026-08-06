@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name          = 'nebula-token'
-  spec.version       = '1.0.2'
+  spec.version       = '1.0.3'
   spec.authors       = ['Matteo Teodori']
   spec.email         = ['hello@nebulatoken.dev']
   spec.summary       = 'Opaque rotating refresh tokens (RFC 9700 model).'

@@ -6,12 +6,12 @@ Java implementation of [NEBULA](../../SPECIFICATION.md) — opaque rotating refr
 <dependency>
   <groupId>dev.nebulatoken</groupId>
   <artifactId>nebula-token</artifactId>
-  <version>1.0.2</version>
+  <version>1.0.3</version>
 </dependency>
 ```
 
 ```groovy
-implementation 'dev.nebulatoken:nebula-token:1.0.2'
+implementation 'dev.nebulatoken:nebula-token:1.0.3'
 ```
 
 ```java

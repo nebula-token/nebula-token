@@ -4,6 +4,54 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] - 2026-08-06
+
+`spec_version` remains **1**. `SPECIFICATION.md`, both vector files and all ten
+implementations' behaviour are unchanged; no requirement changes meaning and no
+error code is added, removed or redefined. One packaging defect is fixed in the
+TypeScript package, the paper is now citable, and the build tooling is updated.
+
+### Added
+- The paper is posted: **NEBULA: A Language-Independent Specification for Opaque
+  Rotating Refresh Tokens**, [arXiv:2608.04115](https://arxiv.org/abs/2608.04115)
+  (`10.48550/arXiv.2608.04115`, cs.CR, 2026-08-04). `CITATION.cff` carries it as
+  `preferred-citation`, so a citing tool prefers the paper over the software
+  record, and `README.md` gains a "Citing" section. This is the step
+  `RELEASING.md` "After the tag" has been holding open — a preferred-citation
+  pointing at an unposted preprint makes every citing tool emit a dead
+  reference, so it could not be written earlier. `journal:` is deliberately
+  omitted rather than set to `arXiv`: CFF 1.2.0 has no preprint type, and tools
+  render that field verbatim into reference lists.
+
+### Fixed
+- `packages/typescript`: `exports["."]` declared only an `import` condition, so
+  Node refused `require('nebula-token')` at **resolution** with
+  `ERR_PACKAGE_PATH_NOT_EXPORTED` — before the file's format was ever
+  considered, and therefore before `require(esm)` (Node 22.12 and later) could
+  load it. A TypeScript backend compiled with `module: CommonJS`, which is most
+  of them, could not use the package at all; the only workarounds were an ESM
+  migration of the consumer or an asynchronous `import()`, and neither is
+  reasonable to ask of an adopter. A `require` condition now points at the same
+  ESM build, and `packages/typescript/test/engine.test.ts` pins the manifest
+  shape. `engines.node` stays `>=22`: raising it to `22.12` would withdraw
+  stated support from ESM consumers on 22.0–22.11 who are unaffected, and
+  nobody regresses without it — a CommonJS consumer on those versions was
+  already broken, with a different error. The nine other packages have no
+  equivalent surface.
+- Six sentences across `README.md` (×3), `docs/COMPLIANCE.md`, `docs/STORE.md`
+  and `packages/python/README.md` still said the conformance suite has **46**
+  shared cases. 1.0.2 took it to 48 when `dh-08` and `dh-09` raised
+  `counts.device_hashing` from 7 to 9. Each is a claim about conformance made
+  to a reader deciding whether to trust it, and nothing gated any of them: the
+  website derives the number from the `counts` block and was right, while the
+  repository's own markdown types it by hand.
+
+### Changed
+- Build and CI tooling only; no runtime dependency is added to any package.
+  Five Maven build plugins (`packages/java/pom.xml`), the TypeScript test group
+  (`@types/node`, `tsx`, lockfile only), and five GitHub Actions — each still
+  pinned to a commit SHA, as `scripts/check-pinned-actions.mjs` requires.
+
 ## [1.0.2] - 2026-08-04
 
 `spec_version` remains **1** and no conforming behaviour changes. One erratum is
@@ -149,6 +197,7 @@ implementations are byte-identical to `1.0.0`.
   window, family revocation, sender (device) binding, dual expiry clocks,
   pepper rotation via `kid`.
 
+[1.0.3]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.3
 [1.0.2]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.2
 [1.0.1]: https://github.com/nebula-token/nebula-token/releases/tag/v1.0.1
 [1.0.0]: https://github.com/nebula-token/nebula-token/commit/cb66b3dd897dc968bff8b211f001b94de7531b09

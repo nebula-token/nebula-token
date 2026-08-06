@@ -14,11 +14,11 @@ authors:
     # The contact of record, shared with the package manifests and the paper.
     # SUPPORT.md says what each address is for.
     email: hello@nebulatoken.dev
-version: 1.0.2
+version: 1.0.3
 # Must equal the date of the release named by `version` above, together with
 # that release's heading in CHANGELOG.md. scripts/version.mjs checks all three;
 # RELEASING.md carries the step that keeps them in step.
-date-released: "2026-08-04"
+date-released: "2026-08-06"
 license: Apache-2.0
 repository-code: "https://github.com/nebula-token/nebula-token"
 url: "https://nebulatoken.dev"
