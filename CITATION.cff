@@ -32,11 +32,38 @@ keywords:
   - security
   - conformance-testing
 #
-# An archival DOI and a preferred-citation block are deliberately absent until
-# the artefacts they point at exist: a DOI is minted from a published tag, and
-# a preferred-citation pointing at a preprint that is not yet posted would make
-# every citing tool emit a dead reference. RELEASING.md carries both as
-# post-tag steps. The shape they take when they arrive:
+# The paper is posted, so the block that was reserved for it below is now real:
+# citing tools prefer `preferred-citation` over the software record above, which
+# is the intent — cite the paper, and get the software through it.
+#
+# `journal:` is deliberately absent. CFF 1.2.0 has no `preprint` reference type,
+# and the usual workaround is `type: article` with `journal: arXiv` — but arXiv
+# is a preprint server, not a journal, and this file is read by tools that
+# render that field verbatim into a reference list. `type: article` with a DOI,
+# a URL and a `notes` line that says what it is states the same thing without
+# claiming a venue that does not exist.
+preferred-citation:
+  type: article
+  title: "NEBULA: A Language-Independent Specification for Opaque Rotating Refresh Tokens"
+  authors:
+    - family-names: Teodori
+      given-names: Matteo
+      email: hello@nebulatoken.dev
+  year: 2026
+  month: 8
+  doi: 10.48550/arXiv.2608.04115
+  url: "https://arxiv.org/abs/2608.04115"
+  identifiers:
+    - type: other
+      value: "arXiv:2608.04115v1"
+      description: The arXiv identifier, including the version this entry describes.
+  notes: Preprint, posted to arXiv (cs.CR) on 2026-08-04. Not peer-reviewed.
+#
+# An archival DOI is still deliberately absent: it is minted from a published
+# tag, and RELEASING.md carries that as a post-tag step. Note that the DOI above
+# is arXiv's own, for the paper — it is not an archive of this repository at the
+# version named above, and the two must not be conflated. The shape the archival
+# one takes when it arrives:
 #
 # identifiers:
 #   - type: doi

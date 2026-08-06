@@ -182,7 +182,7 @@ docs/STORE.md              ← the six methods as SQL, retention, transactions, 
 docs/OPERATIONS.md         ← metrics, alarms, pepper rotation, GC, capacity, incident response
 docs/THREAT_MODEL.md       ← STRIDE analysis, with requirement and vector traceability
 docs/COMPLIANCE.md         ← honest ASVS / NIST SP 800-63B mapping
-docs/paper/                ← the accompanying paper (LaTeX source; the PDF is built by CI)
+docs/paper/                ← the accompanying paper, arXiv:2608.04115 (LaTeX source; the PDF is built by CI)
 COMPATIBILITY.md           ← what 1.0 freezes, what may move, the support window
 VERSIONING.md              ← spec_version vs package versions
 RELEASING.md               ← how ten artefacts are published from one tag
@@ -193,6 +193,12 @@ docker/                    ← run the whole conformance matrix without installi
 .github/workflows/ci.yml   ← full test matrix across all 10 languages, plus the repository gates
 AGENTS.md                  ← instructions for coding agents (CLAUDE.md imports it)
 ```
+
+## Citing
+
+The design and its rationale are written up as a paper: **NEBULA: A Language-Independent Specification for Opaque Rotating Refresh Tokens**, [arXiv:2608.04115](https://arxiv.org/abs/2608.04115) ([`10.48550/arXiv.2608.04115`](https://doi.org/10.48550/arXiv.2608.04115)), cs.CR. It is a preprint and has not been peer-reviewed. The LaTeX source is in [`docs/paper/`](docs/paper/) and the PDF is built by CI, so the version in the repository is the one the tag carries.
+
+Cite the paper rather than the software: [`CITATION.cff`](CITATION.cff) carries it as `preferred-citation`, and every tool that reads that file will prefer it automatically. Where a requirement is what you are citing, cite it by number — `https://nebulatoken.dev/spec/#N-30` is a permanent anchor for `[N-30]`, and the numbers never move ([`VERSIONING.md`](VERSIONING.md)).
 
 ## Contributing
 
