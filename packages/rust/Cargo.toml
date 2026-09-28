@@ -28,7 +28,7 @@ include = [
 base64 = "0.22"
 hex = "0.4"
 hmac = "0.12"
-rand = "0.8"
+rand = "0.10"
 sha2 = "0.10"
 subtle = "2"
 
